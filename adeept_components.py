@@ -84,11 +84,19 @@ class DriveMotor:
 
     On an Adeept HAT, the ENABLE and INPUT connections are connected to
     GPIO pins and the OUTPUT connections are connected to the "Motor A"
-    and "Motor B" ports on the HAT.
+    and "Motor B" ports.
 
     METHODS
     =======
 
+    __init__() -> None:
+        Prepare a drive motor for use.
+
+    set_speed() -> None:
+        Set the speed of the drive motor.
+
+    stop() -> None:
+        Turn off the power to the drive motor and let it freewheel.
     """
 
     # CLASS PRIVATE PROPERTIES
@@ -117,6 +125,12 @@ class DriveMotor:
     #
     # _CONTROLLER:  RPi.GPIO.PWM
     #     A PWM controller for setting the speed of the motor.
+    #
+    # _speed:  int, None
+    #     The drive motor's current speed (-100 to 100).  A value of 0
+    #     means that an electromotive brake has been applied to the
+    #     motor.  A value of "None" means that the motor is
+    #     freewheeling.
 
     #_PWM_FREQUENCY:  int = 1000
     _PWM_FREQUENCY:  int = 2000
@@ -163,7 +177,7 @@ class DriveMotor:
             raise ValueError(f"\"scale_factor\" ({scale_factor}) must be "
                              f"greater than 0.0 and not more than 1.0")
 
-        # Declare prviate properties.
+        # Declare private properties.
 
         self._ENABLE_PIN:  int     = enable_pin
         self._INPUT_PIN_1:  int    = input_pin_1
@@ -179,47 +193,78 @@ class DriveMotor:
         except:
             pass
 
+        self._CONTROLLER.start(0)
+
+        self._speed = None
+
+# ---------------------------------------------------------------------
+
+    def speed(self) -> Union[int, None]:
+        """
+        Get the speed of the drive motor.
+        """
+
+        return self._speed
+# ---------------------------------------------------------------------
+
+    def set_speed(self, speed:  int) -> None:
+        """
+        Set the speed of the drive motor.
+
+        PARAMETERS
+        ==========
+
+        speed:  int
+            The new speed for the drive motor (must be from -100 to
+            100).  Negative values will cause the motor to rotate in
+            reverse.  A value of 0 will apply an electromotive brake to
+            the motor.
+
+        RAISES
+        ======
+
+        ValueError
+            "speed" is given an invalid value.
+        """
+
+        if (speed < -100) or (speed > 100):
+            raise ValueError(f"\"speed\" ({speed}) must be from -100 to 100.")
+
+        if speed == 0:
+            GPIO.output(self._INPUT_PIN_1, GPIO.HIGH)
+            GPIO.output(self._INPUT_PIN_2, GPIO.HIGH)
+
+            new_duty_cycle = 100
+        else:
+            # Duty cycle must always be a positive integer -- therefore,
+            # direction of rotation is determined by which INPUT pin is
+            # HIGH and which one is LOW.
+
+            if speed > 0:
+                GPIO.output(self._INPUT_PIN_1, GPIO.HIGH)
+                GPIO.output(self._INPUT_PIN_2, GPIO.LOW)
+            else:
+                GPIO.output(self._INPUT_PIN_1, GPIO.LOW)
+                GPIO.output(self._INPUT_PIN_2, GPIO.HIGH)
+
+            new_duty_cycle = round(abs(speed * self._SCALE_FACTOR))
+
+        self._CONTROLLER.ChangeDutyCycle(new_duty_cycle)
+
+        self._speed = speed
+
 # ---------------------------------------------------------------------
 
     def stop(self) -> None:
-    # This method cuts power the drive motor, letting it freewheel.
+        """
+        Turn off the power to the drive motor and let it freewheel.
+        """
 
         GPIO.output(self._INPUT_PIN_1, GPIO.LOW)
         GPIO.output(self._INPUT_PIN_2, GPIO.LOW)
         GPIO.output(self._ENABLE_PIN,  GPIO.LOW)
 
-# ---------------------------------------------------------------------
-
-    def brake(self) -> None:
-    # This method applies an electromotive brake to the drive motor.
-
-        GPIO.output(self._INPUT_PIN_1, GPIO.HIGH)
-        GPIO.output(self._INPUT_PIN_2, GPIO.HIGH)
-        self._CONTROLLER.start(100)
-        self._CONTROLLER.ChangeDutyCycle(100)
-
-# ---------------------------------------------------------------------
-
-    def set_speed(self, speed:  int) -> None:
-    # This method sets to speed of the drive motor.
-    #
-    # "speed" must be an integer from -100 to 100.  Zero will stop the drive motor.
-    #
-    # If the drive motor doesn't rotate in the intended direction then specify the opposite
-    # Boolean value for "reverseDirection" when calling the constructor.
-
-        if speed > 0:
-            GPIO.output(self._INPUT_PIN_2, GPIO.LOW)
-            GPIO.output(self._INPUT_PIN_1, GPIO.HIGH)
-            self._CONTROLLER.start(100)
-            self._CONTROLLER.ChangeDutyCycle(round(speed * self._SCALE_FACTOR))
-        elif speed < 0:
-            GPIO.output(self._INPUT_PIN_1, GPIO.LOW)
-            GPIO.output(self._INPUT_PIN_2, GPIO.HIGH)
-            self._CONTROLLER.start(100)
-            self._CONTROLLER.ChangeDutyCycle(round(-speed * self._SCALE_FACTOR))
-        else:
-            self.stop()
+        self._speed = None
 
 # ======================================================================
 # HC-SR04 ULTRSONIC SENSOR CLASS DEFINITION
