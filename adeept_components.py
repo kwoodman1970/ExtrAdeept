@@ -338,15 +338,15 @@ class UltrasonicSensor:
                 i += 1
 
         return delay * self._SPEED_OF_SOUND / 2.0 if detected \
-               else sys.float_info.max
+            else sys.float_info.max
 
 # ---------------------------------------------------------------------
 
     def _ping(self) -> float:
 
-    time.sleep(min(0.0,
-                    time.time() - self._last_trigger_time
-                    + self._TRIGGER_INTERVAL))
+        time.sleep(min(0.0,
+                       time.time() - self._last_trigger_time
+                       + self._TRIGGER_INTERVAL))
 
         GPIO.output(self._TRIGGER_PIN,GPIO.HIGH)
         time.sleep(self._TRIGGER_DURATION)
