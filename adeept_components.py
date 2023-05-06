@@ -92,6 +92,9 @@ class DriveMotor:
     __init__() -> None:
         Prepare a drive motor for use.
 
+    speed() -> Union[int, None]:
+        Get the speed of the drive motor.
+
     set_speed() -> None:
         Set the speed of the drive motor.
 
@@ -159,8 +162,8 @@ class DriveMotor:
         scale_factor:  float
             An adjustment for when one drive motor is slightly faster
             than another and needs to be slowed down (for example, to
-            keep a vehicle moving in a straight line).  It must be no
-            greater than 1.0.
+            keep a vehicle moving in a straight line).  It must be
+            greater 0.0 and no greater than 1.0.
 
         RAISES
         ======
@@ -271,54 +274,47 @@ class DriveMotor:
 # ======================================================================
 
 class UltrasonicSensor:
-# This class is an interface for the HC-SR04 ultrasonic sensor component.
-#
-# The device works by emitting an ultrasonic ping when it recives a high signal for at least
-# 10 microseconds on its trigger input.  Its response output goes high and stays that way until
-# either the ping's echo is received or 38 milliseconds has elapsed (a timeout indicating that
-# it never heard back from the ping).
-#
-# If an echo was received then the distance can be calculated by multiplying the time elapsed
-# between the high and low states of the response output by the speed of sound, then dividing
-# by two.
-#
-# Connect this device to the "Ultrasonic" port on the Adeept Motor HAT.  Do NOT connect it to
-# any other port -- doing so will likely damage it!
+    """
+    Control an HC-SR04 ultrasonic distance sensor.
 
-    _triggerDuration =   0.000015  # how long to trigger the trigger pin for to start a sonic ping
-    _speedOfSound    = 343.42      # in metres per second at 20°C
-    _echoTimeout     =   0.035     # how long to wait for an echo before giving up
-    _pingInterval    =   0.060     # interval between pings
+    Connect this component to the "Ultrasonic" port on the Adeept HAT.
+    Do NOT connect it to any other port -- doing so will likely damage
+    it!
+
+    An HC-SR04 module has a TRIGGER connection and an ECHO connection.
+    When TRIGGER is high for at least 10us, the module will emit eight
+    40Khz ultrasonic pulses, then set ECHO high.  It will then set ECHO
+    low either when it detects an ultrasonic echo or after 38ms.
+    (whichever occurs first).
+
+    This sequence can take up to 60ms.
+
+    If an ultrasonic echo was detected then the distance can be
+    calculated by multiplying the total time that ECHO was high by the
+    speed of sound, then dividing by two.
+    """
+
+    _TRIGGER_DURATION =   0.000011  # how long to trigger the trigger pin for to start a sonic ping
+    _SPEED_OF_SOUND   = 343.42      # in metres per second at 20°C
+    _ECHO_TIMEOUT     =   0.037     # how long to wait for an echo before giving up
+    _TRIGGER_INTERVAL =   0.065     # interval between pings
 
 # ---------------------------------------------------------------------
 
-    def __init__(self, triggerPin, echoPin):
+    def __init__(self, trigger_pin:  int, echo_pin:  int) -> None:
     # This constructor sets up the HC_SR04 device for use.
 
-        self._triggerPin = triggerPin
-        self._echoPin    = echoPin
+        self._TRIGGER_PIN = trigger_pin
+        self._ECHO_PIN    = echo_pin
 
-        GPIO.setup(self._triggerPin,  GPIO.OUT, initial = GPIO.LOW)
-        GPIO.setup(self._echoPin, GPIO.IN)
+        self._last_trigger_time = 0.0
 
-# ---------------------------------------------------------------------
-
-    def setTemperature(self, newTemperature):
-
-        # According to Wikipedia, the speed of sound can be calculated by the
-        # following formula:
-        #
-        #   v = 331.3 m/s + (T * 0.606 m/s°C)
-        #
-        # where T is the temperature in degrees Celsius.
-        #
-        # See https://en.wikipedia.org/wiki/Speed_of_sound#Speed_of_sound_in_ideal_gases_and_air
-
-        self._speedOfSound = 331.3 + (0.606 * newTemperature)
+        GPIO.setup(self._TRIGGER_PIN,  GPIO.OUT, initial = GPIO.LOW)
+        GPIO.setup(self._ECHO_PIN, GPIO.IN)
 
 # ---------------------------------------------------------------------
 
-    def ping(self, numAttempts = 1) -> float:
+    def ping(self, num_attempts:  int = 1) -> float:
     # This method returns a distance in metres, or sys.maxsize if the distance is infinte.
     #
     # "numAttempts" is an integer indicating the number of pings to emit without hearing an
@@ -332,37 +328,39 @@ class UltrasonicSensor:
         i        = 0
         detected = False
 
-        while (i < numAttempts) and not detected:
+        while (i < num_attempts) and not detected:
             delay    = self._ping()
-            detected = (delay < self._echoTimeout)
+            detected = (delay < self._ECHO_TIMEOUT)
 
             if not detected:
-                time.sleep(self._pingInterval)
+                time.sleep(self._TRIGGER_INTERVAL)
 
                 i += 1
 
-        return delay * self._speedOfSound / 2.0 if detected \
+        return delay * self._SPEED_OF_SOUND / 2.0 if detected \
                else sys.float_info.max
 
 # ---------------------------------------------------------------------
 
     def _ping(self) -> float:
 
-        GPIO.output(self._triggerPin,GPIO.LOW)
-        time.sleep(0.000002)
-        GPIO.output(self._triggerPin,GPIO.HIGH)
-        time.sleep(self._triggerDuration)
-        GPIO.output(self._triggerPin, GPIO.LOW)
+    time.sleep(min(0.0,
+                    time.time() - self._last_trigger_time
+                    + self._TRIGGER_INTERVAL))
+
+        GPIO.output(self._TRIGGER_PIN,GPIO.HIGH)
+        time.sleep(self._TRIGGER_DURATION)
+        GPIO.output(self._TRIGGER_PIN, GPIO.LOW)
 
         # The time from when the response pin goes high to when it goes low is the delay
         # betwen transmitting and receiving the ping.
 
-        while not GPIO.input(self._echoPin):
+        while not GPIO.input(self._ECHO_PIN):
             pass
 
         startTime = time.time()
 
-        while GPIO.input(self._echoPin):
+        while GPIO.input(self._ECHO_PIN):
             pass
 
         endTime = time.time()
