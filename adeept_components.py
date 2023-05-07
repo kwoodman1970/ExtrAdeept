@@ -309,18 +309,18 @@ class UltrasonicSensor:
     # CLASS PRIVATE PROPERTIES
     # ========================
     #
+    # _TRIGGER_INTERVAL
+    #     The minium interval between pings.
+    #
     # _TRIGGER_DURATION:  float
     #     How long keep the TRIGGER pin high when initiating an
     #     ultrasonic ping.
     #
-    # _SPEED_OF_SOUND:  float
-    #     The speed of sound in metres per second at 20°C.
-    #
     # _ECHO_TIMEOUT:  float
     #     How long to wait for an echo before giving up.
     #
-    # _TRIGGER_INTERVAL
-    #     The minium interval between pings.
+    # _SPEED_OF_SOUND:  float
+    #     The speed of sound in metres per second at 20°C.
     #
     # PRIVATE PROPERTIES
     # ==================
@@ -335,11 +335,10 @@ class UltrasonicSensor:
     #     The last time at which the entire sequence started to be
     #     triggered.
 
-
-    _TRIGGER_DURATION =   0.000011
-    _SPEED_OF_SOUND   = 343.42
-    _ECHO_TIMEOUT     =   0.037
     _TRIGGER_INTERVAL =   0.065
+    _TRIGGER_DURATION =   0.000011
+    _ECHO_TIMEOUT     =   0.037
+    _SPEED_OF_SOUND   = 343.42
 
 # ---------------------------------------------------------------------
 
@@ -424,6 +423,54 @@ class UltrasonicSensor:
 
         if total_time < self._ECHO_TIMEOUT:
             return total_time * self._SPEED_OF_SOUND / 2.0
+        else:
+            return None
+
+# ---------------------------------------------------------------------
+
+    def get_distance2(self) -> Union[float, None]:
+        """
+        Detect the distance to an object.
+
+        RETURNS
+        =======
+
+        The distance detected by the component in meters/second
+        (residents of the United States of America, Liberia and Myanmar
+        can convert this to feet/second by multiplying this value by
+        3.28084 feet/meter).
+
+        If no distance was detected (i.e. the component timed-out) then
+        "None" is returned.
+        """
+
+        # First, make sure that enough time has pased since the last
+        # time the sensor was triggered.
+
+        time.sleep(max(0.0, self._last_trigger_time + self._TRIGGER_INTERVAL
+                       - time.time()))
+
+        self._last_trigger_time = time.time()
+
+        GPIO.output(self._TRIGGER_PIN,GPIO.HIGH)
+        time.sleep(self._TRIGGER_DURATION)
+        GPIO.output(self._TRIGGER_PIN, GPIO.LOW)
+
+        # The time from when the response pin goes high to when it goes
+        # low is the delay betwen transmitting and receiving the
+        # ultrasonic signals.
+
+        if GPIO.wait_for_edge(self._TRIGGER_PIN, GPIO.GPIO_RISING,
+                              self._TRIGGER_INTERVAL * 1000.0) is not None:
+
+            start_time = time.time()
+
+            if GPIO.wait_for_edge(self._TRIGGER_PIN, GPIO.GPIO_FALLING,
+                                  self._ECHO_TIMEOUT * 1000.0) is not None:
+
+                return (time.time() - start_time) * self._SPEED_OF_SOUND / 2.0
+            else:
+                return None
         else:
             return None
 
