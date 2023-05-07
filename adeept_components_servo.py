@@ -210,7 +210,7 @@ class Servo:
                  = (_DEFAULT_MIN_PWM + _DEFAULT_MAX_PWM) // 2) -> None:
 
         """
-        Prepare a servo for use.
+        Prepare a PCA9685-connected servo for use.
 
         PARAMETERS
         ==========

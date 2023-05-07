@@ -33,7 +33,6 @@ import sys
 import time
 from typing import Union, Optional
 
-#import RPi.GPIO as GPIO
 from RPi import GPIO
 from rpi_ws281x import Adafruit_NeoPixel
 
@@ -112,14 +111,14 @@ class DriveMotor:
     # ==================
     #
     # _ENABLE_PIN:  int
-    #     The GPIO pin that connects to the L298N controller's ENABLE
-    #     connection.
+    #     The GPIO pin (output) that connects to the L298N controller's
+    #     ENABLE connection.
     #
     # _INPUT_PIN_1:  int
     # _INPUT_PIN_2:  int
-    #     The GPIO pins that connect to the L298N controller's INPUT
-    #     connections.  If the motor rotates opposite to the desired
-    #     direction then swap these two values.
+    #     The GPIO pins (output) that connect to the L298N controller's
+    #     INPUT connections.  If the motor rotates opposite to the
+    #     desired direction then swap these two values.
     #
     # _SCALE_FACTOR:  float
     #     An adjustment for when one drive motor is slightly faster than
@@ -142,20 +141,21 @@ class DriveMotor:
                  scale_factor:  float = 1.0) -> None:
 
         """
-        Prepare a drive motor for use.
+        Prepare an L298N-connected drive motor for use.
 
         PARAMETERS
         ==========
 
         enable_pin:  int
-            The GPIO pin that connects to the L298N controller's ENABLE
-            connection.
+            The GPIO pin (output) that connects to the L298N
+            controller's ENABLE connection.
 
         input_pin_1:  int
         input_pin_2:  int
-            The GPIO pins that connect to the L298N controller's
-            INPUT connections.  If the motor rotates opposite to the
-            desired direction then swap these two arguments.
+            The GPIO pins (output) that connect to the L298N
+            controller's INPUT connections.  If the motor rotates
+            opposite to the desired direction then swap these two
+            arguments.
 
         All GPIO pins must be from 0 to 27 (BCM numbering).
 
@@ -284,25 +284,91 @@ class UltrasonicSensor:
     An HC-SR04 module has a TRIGGER connection and an ECHO connection.
     When TRIGGER is high for at least 10us, the module will emit eight
     40Khz ultrasonic pulses, then set ECHO high.  It will then set ECHO
-    low either when it detects an ultrasonic echo or after 38ms.
-    (whichever occurs first).
+    low either when it detects an ultrasonic echo or after 38ms has
+    elapsed (whichever occurs first).
 
     This sequence can take up to 60ms.
 
     If an ultrasonic echo was detected then the distance can be
     calculated by multiplying the total time that ECHO was high by the
     speed of sound, then dividing by two.
+
+    IMPORTANT NOTE ABOUT ACCURACY
+    =============================
+
+    It isn't always possible to make accurate measurements due to the
+    way that Python and Linux can take interrupt a program to deal with
+    other processess.  This can be mitigated by taking multiple readings
+    and using smoothing algorithms.
+
+    METHODS
+    =======
+
     """
 
-    _TRIGGER_DURATION =   0.000011  # how long to trigger the trigger pin for to start a sonic ping
-    _SPEED_OF_SOUND   = 343.42      # in metres per second at 20°C
-    _ECHO_TIMEOUT     =   0.037     # how long to wait for an echo before giving up
-    _TRIGGER_INTERVAL =   0.065     # interval between pings
+    # CLASS PRIVATE PROPERTIES
+    # ========================
+    #
+    # _TRIGGER_DURATION:  float
+    #     How long keep the TRIGGER pin high when initiating an
+    #     ultrasonic ping.
+    #
+    # _SPEED_OF_SOUND:  float
+    #     The speed of sound in metres per second at 20°C.
+    #
+    # _ECHO_TIMEOUT:  float
+    #     How long to wait for an echo before giving up.
+    #
+    # _TRIGGER_INTERVAL
+    #     The minium interval between pings.
+    #
+    # PRIVATE PROPERTIES
+    # ==================
+    #
+    # _TRIGGER_PIN:  int
+    #     The GPIO pin (output) that's connected to TRIGGER.
+    #
+    # _ECHO_PIN:  int
+    #     The GPIO pin (input) that's connected to ECHO.
+    #
+    # _last_trigger_time:  float
+    #     The last time at which the entire sequence started to be
+    #     triggered.
+
+
+    _TRIGGER_DURATION =   0.000011
+    _SPEED_OF_SOUND   = 343.42
+    _ECHO_TIMEOUT     =   0.037
+    _TRIGGER_INTERVAL =   0.065
 
 # ---------------------------------------------------------------------
 
     def __init__(self, trigger_pin:  int, echo_pin:  int) -> None:
-    # This constructor sets up the HC_SR04 device for use.
+        """
+        Prepare an HC_SR04-connected ultrasonic distance sensor for use.
+
+        PARAMETERS
+        ==========
+
+        trigger_pin:  int
+            The GPIO pin (output) that connects to the HC-SR04 sensor's
+            TRIGGER connection.
+
+        echo_pin:  int
+            The GPIO pin (input) that connects to the HC-SR04 sensor's
+            ECHO connection.
+
+        All GPIO pins must be from 0 to 27 (BCM numbering).
+
+        RAISES
+        ======
+
+        ValueError
+            One or more arguments are invalid.
+        """
+
+        _validate_gpio_pin_number(trigger_pin, "trigger_pin")
+        _validate_gpio_pin_number(echo_pin, "echo_pin")
 
         self._TRIGGER_PIN = trigger_pin
         self._ECHO_PIN    = echo_pin
@@ -311,6 +377,55 @@ class UltrasonicSensor:
 
         GPIO.setup(self._TRIGGER_PIN,  GPIO.OUT, initial = GPIO.LOW)
         GPIO.setup(self._ECHO_PIN, GPIO.IN)
+
+# ---------------------------------------------------------------------
+
+    def get_distance(self) -> Union[float, None]:
+        """
+        Detect the distance to an object.
+
+        RETURNS
+        =======
+
+        The distance detected by the component in meters/second
+        (residents of the United States of America, Liberia and Myanmar
+        can convert this to feet/second by multiplying this value by
+        3.28084 feet/meter).
+
+        If no distance was detected (i.e. the component timed-out) then
+        "None" is returned.
+        """
+
+        # First, make sure that enough time has pased since the last
+        # time the sensor was triggered.
+
+        time.sleep(max(0.0, self._last_trigger_time + self._TRIGGER_INTERVAL
+                       - time.time()))
+
+        self._last_trigger_time = time.time()
+
+        GPIO.output(self._TRIGGER_PIN,GPIO.HIGH)
+        time.sleep(self._TRIGGER_DURATION)
+        GPIO.output(self._TRIGGER_PIN, GPIO.LOW)
+
+        # The time from when the response pin goes high to when it goes
+        # low is the delay betwen transmitting and receiving the
+        # ultrasonic signals.
+
+        while GPIO.input(self._ECHO_PIN) == GPIO.LOW:
+            pass
+
+        start_time = time.time()
+
+        while GPIO.input(self._ECHO_PIN) == GPIO.HIGH:
+            pass
+
+        total_time = time.time() - start_time
+
+        if total_time < self._ECHO_TIMEOUT:
+            return total_time * self._SPEED_OF_SOUND / 2.0
+        else:
+            return None
 
 # ---------------------------------------------------------------------
 
