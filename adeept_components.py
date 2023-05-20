@@ -29,9 +29,9 @@ DriveMotor:  Class
 # IMPORTS FROM OTHER MODULES
 # ======================================================================
 
-import sys
+import atexit
 import time
-from typing import Union, Optional
+from typing import List, Union, Optional
 
 from RPi import GPIO
 from rpi_ws281x import Adafruit_NeoPixel
@@ -134,7 +134,7 @@ class DriveMotor:
     #     motor.  A value of "None" means that the motor is
     #     freewheeling.
 
-    #_PWM_FREQUENCY:  int = 1000
+    # _PWM_FREQUENCY:  int = 1000
     _PWM_FREQUENCY:  int = 2000
 
     def __init__(self, enable_pin:  int, input_pin_1:  int, input_pin_2:  int,
@@ -297,19 +297,24 @@ class UltrasonicSensor:
     =============================
 
     It isn't always possible to make accurate measurements due to the
-    way that Python and Linux can take interrupt a program to deal with
-    other processess.  This can be mitigated by taking multiple readings
-    and using smoothing algorithms.
+    way that Python and Linux can interrupt a program to deal with other
+    processess.  This can be mitigated by taking multiple readings and
+    using smoothing algorithms.
 
     METHODS
     =======
 
+    __init__() -> None:
+        Prepare an HC_SR04-connected ultrasonic distance sensor for use.
+
+    get_distance() -> Union[float, None]:
+        Detect the distance to an object.
     """
 
     # CLASS PRIVATE PROPERTIES
     # ========================
     #
-    # _TRIGGER_INTERVAL
+    # _TRIGGER_INTERVAL:  float
     #     The minium interval between pings.
     #
     # _TRIGGER_DURATION:  float
@@ -335,10 +340,10 @@ class UltrasonicSensor:
     #     The last time at which the entire sequence started to be
     #     triggered.
 
-    _TRIGGER_INTERVAL =   0.065
-    _TRIGGER_DURATION =   0.000011
-    _ECHO_TIMEOUT     =   0.037
-    _SPEED_OF_SOUND   = 343.42
+    _TRIGGER_INTERVAL:  float =   0.065
+    _TRIGGER_DURATION:  float =   0.000011
+    _ECHO_TIMEOUT:      float =   0.037
+    _SPEED_OF_SOUND:    float = 343.42
 
 # ---------------------------------------------------------------------
 
@@ -460,12 +465,12 @@ class UltrasonicSensor:
         # low is the delay betwen transmitting and receiving the
         # ultrasonic signals.
 
-        if GPIO.wait_for_edge(self._TRIGGER_PIN, GPIO.GPIO_RISING,
+        if GPIO.wait_for_edge(self._TRIGGER_PIN, GPIO.RISING,
                               self._TRIGGER_INTERVAL * 1000.0) is not None:
 
             start_time = time.time()
 
-            if GPIO.wait_for_edge(self._TRIGGER_PIN, GPIO.GPIO_FALLING,
+            if GPIO.wait_for_edge(self._TRIGGER_PIN, GPIO.FALLING,
                                   self._ECHO_TIMEOUT * 1000.0) is not None:
 
                 return (time.time() - start_time) * self._SPEED_OF_SOUND / 2.0
@@ -474,140 +479,206 @@ class UltrasonicSensor:
         else:
             return None
 
-# ---------------------------------------------------------------------
-
-    def ping(self, num_attempts:  int = 1) -> float:
-    # This method returns a distance in metres, or sys.maxsize if the distance is infinte.
-    #
-    # "numAttempts" is an integer indicating the number of pings to emit without hearing an
-    # echo before giving up.  If the device is having trouble receiving an echo then set
-    # "numAttempts" to a value greater than one.
-
-        # This is the main loop.  Dring each iteration, it will emit an ultrasonic ping up to
-        # "numAttermpts" times.  If no echo is received by the end of the last iteration then
-        # infinity is assumed.
-
-        i        = 0
-        detected = False
-
-        while (i < num_attempts) and not detected:
-            delay    = self._ping()
-            detected = (delay < self._ECHO_TIMEOUT)
-
-            if not detected:
-                time.sleep(self._TRIGGER_INTERVAL)
-
-                i += 1
-
-        return delay * self._SPEED_OF_SOUND / 2.0 if detected \
-            else sys.float_info.max
-
-# ---------------------------------------------------------------------
-
-    def _ping(self) -> float:
-
-        time.sleep(min(0.0,
-                       time.time() - self._last_trigger_time
-                       + self._TRIGGER_INTERVAL))
-
-        GPIO.output(self._TRIGGER_PIN,GPIO.HIGH)
-        time.sleep(self._TRIGGER_DURATION)
-        GPIO.output(self._TRIGGER_PIN, GPIO.LOW)
-
-        # The time from when the response pin goes high to when it goes low is the delay
-        # betwen transmitting and receiving the ping.
-
-        while not GPIO.input(self._ECHO_PIN):
-            pass
-
-        startTime = time.time()
-
-        while GPIO.input(self._ECHO_PIN):
-            pass
-
-        endTime = time.time()
-
-        return endTime - startTime
-
 # ======================================================================
 # NEOPIXEL STRIP CLASS DEFINITION
 # ======================================================================
 
 class NeoPixelStrip(Adafruit_NeoPixel):
-# This class is an interface for a strip of NeoPixels (not to be confused with RGB LED's).
-#
-# A NeoPixel is an... uh... okay, it is actually an RGB LED -- but with a WS2812 controller.
-# They can be daisy-chained so that only the first one need be connected to the HAT, and each
-# one can be individually addressed and controlled.
-#
-# This class adds two methods -- "fill()" and "clear()" -- to the base class to make it more
-# like its C++ counterpart.
-#
-# There is no destructor because the base class has no destructor and cleans up after itself
-# using a different method.  If you want all of the NeoPixels to go dark at the end of your
-# program's execution then you'll have to call ".clear()" and ".show()" manually.
-#
-# Connect the first NeoPixel to the "WS2812" port on the Adeept Motor HAT.
-#
-# IMPORTANT NOTE:  Instances of this class need to run with root privileges due to the nature
-# of the base class's supporting libraries.
+    """
+    Control a strip of NeoPixels (not to be confused with RGB LED's).
 
-    _DMAChannel = 10     # DMA channel to use (DMA is why root privileges are required)
-    _frequency  = 800000 # data stream frequency in Hz
-    _PWMChannel = 0      # PWM channnel on the data pin to use
-    _brightness = 255    # scale factor for brightness
-    _invert     = False  # invert the signal line?
+    Connect the first NeoPixel to the "WS2812" port on the Adeept HAT.
+
+    A WS2812 NeoPixel is an... uh... okay, it IS actually an RGB LED --
+    but with its own controller.  It has a DI conection for data input
+    and a DO connection for data output.  They can be daisy-chained and
+    only the first one is connected to the HAT.  Each one's colour can
+    be individually specified.
+
+    IMPORTANT NOTE:  Instances of this class need to run with root
+    privileges because the base class's supporting libraries use DMA.
+
+    METHODS
+    =======
+
+    __init__() -> None:
+        Prepare the strip of NeoPixels for use.
+
+    fill() -> None:
+        Set the colour(s) for some or all of the NeoPixels.
+
+        This method was added to make the base class more like its C++
+        counterpart.
+
+    clear() -> None:
+        Turn all NeoPixels off.
+
+        This method was added to make the base class more like its C++
+        counterpart.
+    """
+
+    # CLASS PRIVATE PROPERTIES
+    # ========================
+    #
+    # _DMA_CHANNEL:  int
+    #     DMA channel to use (DMA is why root privileges are required).
+    #
+    # _FREQUENCY:  int
+    #     Data stream frequency in Hz.
+    #
+    # _PWM_CHANNEL:  int
+    #     PWM channnel on the data pin to use.
+    #
+    # _BRIGHTNESS:  int
+    #     Scale factor for brightness.
+    #
+    # _INVERT:  bool
+    #     Invert the signal line.
+
+    _DMA_CHANNEL:  int  = 10
+    _FREQUENCY:    int  = 800000
+    _PWM_CHANNEL:  int  = 0
+    _BRIGHTNESS:   int  = 255
+    _INVERT:       bool = False
 
 # ---------------------------------------------------------------------
 
-    def __init__(self, dataPin, numPixels):
-    # This constructor initializes the strip of NeoPixels for use.
-    #
-    # "numPixels" is the number of NeoPixels in the strip.
+    def __init__(self, data_pin:  int, num_pixels:  int) -> None:
+        """
+        Prepare the strip of NeoPixels for use.
 
-        # The base class does most of the heavy lifting, and the parameters for its constructor
-        # are known ahead of time.
+        PARAMETERS
+        ==========
 
-        Adafruit_NeoPixel.__init__(self, numPixels, dataPin, self._frequency,
-            self._DMAChannel, self._invert, self._brightness, self._PWMChannel)
+        data_pin:  int
+            The GPIO pin (output) that connects to the first NeoPixel's
+            DI connection.
+
+        numPixels:  int
+            The number of NeoPixels in the strip (must be greater than
+            zero).
+
+        RAISES
+        ======
+
+        ValueError
+            One or more arguments are invalid.
+
+        RuntimeError
+            The base class could not initialize the NeoPixels.
+        """
+
+        _validate_gpio_pin_number(data_pin, "trigger_pin")
+
+        if num_pixels <= 0:
+            raise ValueError(f"\"num_pixels\" ({num_pixels}) must be "
+                             f"greater than 0")
+
+        # The base class does most of the heavy lifting, and the
+        # parameters for its constructor are known ahead of time.
+
+        Adafruit_NeoPixel.__init__(self, num_pixels, data_pin, self._FREQUENCY,
+                                   self._DMA_CHANNEL, self._INVERT,
+                                   self._BRIGHTNESS, self._PWM_CHANNEL)
         self.begin()
+        atexit.register(self._terminate)
 
 # ---------------------------------------------------------------------
 
-    def fill(self, color, pixels = None):
-    # This method fills part or all of a strip of NeoPixels with the specified color(s).
-    #
-    # If "color" is a single integer (a 24-bit RGB or 32-bit WRGB integer, depending on the
-    # model of NeoPixel) then that color is applied to all of the NeoPixels in "pixels".
-    #
-    # If "color" is a list then all of the colors in that list are applied to "pixels" in
-    # order.  If there are fewer colors than pixels then the pattern in "color" will repeat.
-    #
-    # "pixels" is a list of NeoPixel indices.  If no list is specified then all NeoPixels will
-    # be changed.
-    #
-    # Changes will not take effect until "self.show()" is called.
+    def fill(self, color:  Union[int, List[int]],
+             pixels:  Optional[List[int]] = None) -> None:
+        """
+        Set the colour(s) for some or all of the NeoPixels.
+
+        Changes will not take effect until ".show()" is called.
+
+        PARAMETERS
+        ==========
+
+        color:  Union[int, List[int]]
+            The new colour or colours (24-bit RGB or 32-bit WRGB,
+            depending on the model of NeoPixel) to set "pixels" to.
+
+            If "color" is a single integer then that colour is applied
+            to all of the NeoPixels in "pixels".
+
+            If "color" is a list then all of the colors in that list are
+            applied to "pixels" in the same order.  If there are fewer
+            colours than pixels then the pattern in "color" will repeat.
+
+            Colours can't be negative.
+
+        pixels:  Optional[List[int]] = None
+            A list of NeoPixel indices.  If "None" then all NeoPixels
+            will be changed.
+
+            All elements of "pixels" must be at least 0 and less than
+            the number of NeoPixels in the strip.
+
+        RAISES
+        ======
+
+        ValueError
+            One or more arguments are invalid.
+
+        """
+
+        # CONSTANTS
+        # =========
+        #
+        # NUM_NEO_PIXELS:  int
+        #     The number of NeoPixels in the strip.
+
+        NUM_NEO_PIXELS = self.numPixels()
 
         if pixels is None:
-            pixels2 = range(self.numPixels())
+            pixels2 = range(NUM_NEO_PIXELS)
         else:
+            for element in pixels:
+                if (element < 0) or (element >= NUM_NEO_PIXELS):
+                    raise ValueError(f"Index in \"pixels\" ({element}) out of "
+                                     f"range (0-{NUM_NEO_PIXELS})")
+
             pixels2 = pixels
 
         if isinstance(color, list):
-            for i in range(len(pixels2)):
-                self.setPixelColor(pixels2[i], color[i % len(color)])
+            for element in color:
+                if element < 0:
+                    raise ValueError(f"Colour in \"color\" ({element}) can't "
+                                     f"be negative")
+
+            # for i in range(len(pixels2)):
+            #     self.setPixelColor(pixels2[i], color[i % len(color)])
+
+            for i, neo_pixel in enumerate(pixels2):
+                self.setPixelColor(neo_pixel, color[i % len(color)])
         else:
+            if color < 0:
+                raise ValueError(f"\"color\" ({color}) can't be "
+                                    f"negative")
+
             for i in pixels2:
                 self.setPixelColor(i, color)
 
 # ---------------------------------------------------------------------
 
     def clear(self):
-    # This method turns off all of the NeoPixels.
-    #
-    # Changes will not take effect until ".show()" is called.
+        """
+        Turn all NeoPixels off.
+
+        Changes will not take effect until ".show()" is called.
+        """
 
         self.fill(0x000000)
+
+# ---------------------------------------------------------------------
+    def _terminate(self) -> None:
+        # Darken all NeoPixels when program terminates.
+        #
+        # Register this method with "atexit".
+
+        self.clear()
+        self.show()
 
 # ======================================================================
 # LINETRACKER CLASS DEFINITION

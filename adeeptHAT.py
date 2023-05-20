@@ -117,22 +117,6 @@ def _endHAT():
 
         _intialized = False
 
-def _endNeoPixels() -> None:
-    # Clean up the NeoPixels (if any) at exit by darkening them.
-    #
-    # This couldn't be done in "_endHAT()" because the
-    # "Adafruit_NeoPixel" object registers its own at-exit function
-    # when the "NeoPixels" object is created.
-
-    global _neoPixels
-
-    print("_endNeoPixels() called.")
-
-    _neoPixels.clear()
-    _neoPixels.show()
-
-    print("_endNeoPixels() darkened all NeoPixels.")
-
 # ======================================================================
 # ADEEPTMOTORHAT1 CLASS DEFINITION
 # ======================================================================
@@ -227,9 +211,6 @@ class adeeptMotorHAT2:
         except RuntimeError:
             logging.warning("NeoPixels are not accessable.")
             _neoPixels = None
-        else:
-            atexit.unregister(_endNeoPixels)
-            atexit.register(_endNeoPixels)
 
         return _neoPixels
 
