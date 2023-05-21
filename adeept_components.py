@@ -31,7 +31,7 @@ DriveMotor:  Class
 
 import atexit
 import time
-from typing import List, Union, Optional
+from typing import Callable, List, Union, Optional
 
 from RPi import GPIO
 from rpi_ws281x import Adafruit_NeoPixel
@@ -581,7 +581,7 @@ class NeoPixelStrip(Adafruit_NeoPixel):
                                    self._DMA_CHANNEL, self._INVERT,
                                    self._BRIGHTNESS, self._PWM_CHANNEL)
         self.begin()
-        atexit.register(self._terminate)
+        atexit.register(self._neo_pixel_strip_atexit)
 
 # ---------------------------------------------------------------------
 
@@ -672,7 +672,8 @@ class NeoPixelStrip(Adafruit_NeoPixel):
         self.fill(0x000000)
 
 # ---------------------------------------------------------------------
-    def _terminate(self) -> None:
+
+    def _neo_pixel_strip_atexit(self) -> None:
         # Darken all NeoPixels when program terminates.
         #
         # Register this method with "atexit".
@@ -685,49 +686,97 @@ class NeoPixelStrip(Adafruit_NeoPixel):
 # ======================================================================
 
 class LineTracker():
-# This class is an interface for a tracking module.
+    """
+    Read the outputs of a line-tracking module.
 
-    def __init__(self, pinLeft, pinMiddle, pinRight, lineIsWhite = False):
+    Connect the line-tracking module to the "Tracking" port on the
+    Adeept HAT.
 
-        self._pinLeft           = pinLeft
-        self._pinMiddle         = pinMiddle
-        self._pinRight          = pinRight
+    The line-tracking module has three infrared emitters & sensors on
+    it.  Each sensor is connected to a pin on the GPIO.  A white surface
+    will set the pin HIGH; a black surface will set the pin LOW.
 
-        if lineIsWhite == True:
-            self._detectionSignal = GPIO.LOW
-        elif lineIsWhite == False:
-            self._detectionSignal = GPIO.HIGH
+    Sensitivity can be adjusted by turning the on-board potentiometer
+    with a screwdriver.
+
+    Instances of this class can be set to detect either black lines on a
+    white surface (default) or white lines on a black surface.
+
+    Two means of detection are supported:  polling and interrupting.
+    """
+
+    def __init__(self, pin_left:  int, pin_middle:  int, pin_right:  int,
+                 line_is_white:  bool = False) -> None:
+
+        self._PIN_LEFT:   int = pin_left
+        self._PIN_MIDDLE: int = pin_middle
+        self._PIN_RIGHT:  int = pin_right
+
+        self._callbacks:  List[Callable[[bool, bool, bool], None]] = []
+
+        if line_is_white is True:
+            self._detection_signal = GPIO.LOW
+        elif line_is_white is False:
+            self._detection_signal = GPIO.HIGH
         else:
-            raise ValueError("lineIsWhite must be either True or False.")
+            raise ValueError(f"line_is_white ({line_is_white}) must be either "
+                             f"True or False.")
 
-        GPIO.setup(pinLeft, GPIO.IN)
-        GPIO.setup(pinMiddle, GPIO.IN)
-        GPIO.setup(pinRight, GPIO.IN)
+        # GPIO.setup(pin_left, GPIO.IN)
+        # GPIO.setup(pin_middle, GPIO.IN)
+        # GPIO.setup(pin_right, GPIO.IN)
 
-# ---------------------------------------------------------------------
-
-    def lineIsWhite(self):
-        self._detectionSignal = GPIO.LOW
-
-# ---------------------------------------------------------------------
-
-    def lineIsBlack(self):
-        self._detectionSignal = GPIO.HIGH
+        for pin in [pin_left, pin_middle, pin_right]:
+            GPIO.setup(pin, GPIO.IN)
+            GPIO.add_event_detect(pin, GPIO.BOTH)
+            GPIO.add_event_callback(pin, self._monitor)
 
 # ---------------------------------------------------------------------
 
-    def left(self):
-        return GPIO.input(self._pinLeft) == self._detectionSignal
+    def line_is_white(self) -> None:
+        self._detection_signal = GPIO.LOW
 
 # ---------------------------------------------------------------------
 
-    def middle(self):
-        return GPIO.input(self._pinMiddle) == self._detectionSignal
+    def line_is_black(self) -> None:
+        self._detection_signal = GPIO.HIGH
 
 # ---------------------------------------------------------------------
 
-    def right(self):
-        return GPIO.input(self._pinRight) == self._detectionSignal
+    def left(self) -> bool:
+        return GPIO.input(self._PIN_LEFT) == self._detection_signal
+
+# ---------------------------------------------------------------------
+
+    def middle(self) -> bool:
+        return GPIO.input(self._PIN_MIDDLE) == self._detection_signal
+
+# ---------------------------------------------------------------------
+
+    def right(self) -> bool:
+        return GPIO.input(self._PIN_RIGHT) == self._detection_signal
+
+# ---------------------------------------------------------------------
+
+    def add_callback(self,
+                     callback:  Callable[[bool, bool, bool], None]) -> None:
+
+        if callback not in self._callbacks:
+            self._callbacks.append(callback)
+
+# ---------------------------------------------------------------------
+
+    def remove_callback(self,
+                        callback:  Callable[[bool, bool, bool], None]) -> None:
+
+        if callback in self._callbacks:
+            self._callbacks.remove(callback)
+
+# ---------------------------------------------------------------------
+
+    def _monitor(self) -> None:
+        for listener in self._callbacks:
+            listener(self.left(), self.middle(), self.right())
 
 # ======================================================================
 # BUZZERACTIVE CLASS DEFINITION
