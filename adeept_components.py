@@ -697,69 +697,198 @@ class LineTracker():
     will set the pin HIGH; a black surface will set the pin LOW.
 
     Sensitivity can be adjusted by turning the on-board potentiometer
-    with a screwdriver.
+    with a Phillips screwdriver.
 
     Instances of this class can be set to detect either black lines on a
     white surface (default) or white lines on a black surface.
 
-    Two means of detection are supported:  polling and interrupting.
+    Two means of detection are supported:  polling and callback
+    functions.
     """
+
+    class _IRSensor():
+        """
+        Manage an infrared sensor.
+
+        METHODS
+        =======
+
+        __init__()
+            Prepare an infred sensor for use.
+
+        _monitor()
+            Event handler for when the infrared sensor changes state.
+
+
+        PROPERTIES
+        ==========
+
+        state:  int
+            The state of the IR sensor (GPIO.LOW or GPIO.HIGH).
+        """
+
+        def __init__(self, pin:  int,
+                     on_change_any:  Callable[[], None]) -> None:
+            """
+            Prepare an infrared sensor for use.
+
+            PARAMETERS
+            ==========
+
+            pin:  int
+                The GPIO pin that's connected to the infrared sensor.
+
+            monitor:  Callable[[], None]
+                Event handler for when any of the infrared sensors
+                changes state.
+            """
+
+            _validate_gpio_pin_number(pin, "pin")
+
+            GPIO.setup(pin, GPIO.IN)
+
+            self._PIN:            int                = pin
+            self._ON_CHANGE_ANY:  Callable[[], None] = on_change_any
+            self._state:          int                = GPIO.input(pin)
+
+            GPIO.add_event_detect(pin, GPIO.BOTH)
+            GPIO.add_event_callback(pin, self._on_change)
+
+        @property
+        def state(self) -> int:
+            """
+            The current state of the infrared sensor.
+
+            RETURNS
+            =======
+
+            GPIO.LOW or GPIO.HIGH.
+            """
+
+            return self._state
+
+        def _on_change(self, pin:  int) -> None:
+            """
+            Event handler for when the infrared sensor changes state.
+            """
+
+            assert pin == self._PIN, \
+                   f"pin {pin} is not the same as self._PIN {self._PIN}"
+
+            self._state = GPIO.input(self._PIN)
+
+            self._ON_CHANGE_ANY()
+
 
     def __init__(self, pin_left:  int, pin_middle:  int, pin_right:  int,
                  line_is_white:  bool = False) -> None:
 
-        self._PIN_LEFT:   int = pin_left
-        self._PIN_MIDDLE: int = pin_middle
-        self._PIN_RIGHT:  int = pin_right
-
-        self._callbacks:  List[Callable[[bool, bool, bool], None]] = []
+        self._PIN_LEFT:   self._IRSensor = self._IRSensor(pin_left,
+                                                          self._on_change)
+        self._PIN_MIDDLE: self._IRSensor = self._IRSensor(pin_middle,
+                                                          self._on_change)
+        self._PIN_RIGHT:  self._IRSensor = self._IRSensor(pin_right,
+                                                          self._on_change)
 
         if line_is_white is True:
-            self._detection_signal = GPIO.LOW
+            self._detection_state = GPIO.LOW
         elif line_is_white is False:
-            self._detection_signal = GPIO.HIGH
+            self._detection_state = GPIO.HIGH
         else:
             raise ValueError(f"line_is_white ({line_is_white}) must be either "
                              f"True or False.")
 
-        # GPIO.setup(pin_left, GPIO.IN)
-        # GPIO.setup(pin_middle, GPIO.IN)
-        # GPIO.setup(pin_right, GPIO.IN)
-
-        for pin in [pin_left, pin_middle, pin_right]:
-            GPIO.setup(pin, GPIO.IN)
-            GPIO.add_event_detect(pin, GPIO.BOTH)
-            GPIO.add_event_callback(pin, self._monitor)
+        self._callbacks:  List[Callable[[bool, bool, bool], None]] = []
 
 # ---------------------------------------------------------------------
 
     def line_is_white(self) -> None:
-        self._detection_signal = GPIO.LOW
+        """
+        Sets the module to track a white line on a black background.
+        """
+
+        self._detection_state = GPIO.LOW
 
 # ---------------------------------------------------------------------
 
     def line_is_black(self) -> None:
-        self._detection_signal = GPIO.HIGH
+        """
+        Sets the module to track a black line on a white background.
+        """
+
+        self._detection_state = GPIO.HIGH
 
 # ---------------------------------------------------------------------
 
+    @property
     def left(self) -> bool:
-        return GPIO.input(self._PIN_LEFT) == self._detection_signal
+        """
+        Get the state of the left IR sensor.
+
+        RETURNS
+        =======
+
+        True if a line was detected, False if otherwise.
+        """
+
+        return self._PIN_LEFT.state == self._detection_state
 
 # ---------------------------------------------------------------------
 
+    @property
     def middle(self) -> bool:
-        return GPIO.input(self._PIN_MIDDLE) == self._detection_signal
+        """
+        Get the state of the middle IR sensor.
+
+        RETURNS
+        =======
+
+        True if a line was detected, False if otherwise.
+        """
+
+        return self._PIN_MIDDLE.state == self._detection_state
 
 # ---------------------------------------------------------------------
 
+    @property
     def right(self) -> bool:
-        return GPIO.input(self._PIN_RIGHT) == self._detection_signal
+        """
+        Get the state of the right IR sensor.
+
+        RETURNS
+        =======
+
+        True if a line was detected, False if otherwise.
+        """
+
+        return self._PIN_RIGHT.state == self._detection_state
 
 # ---------------------------------------------------------------------
 
     def add_callback(self,
                      callback:  Callable[[bool, bool, bool], None]) -> None:
+        """
+        Add a function to be called when an IR sensor's state changes.
+
+        A callback function can only be added once; subsequent attempts
+        to add it will be silently ignored.
+
+        PARAMETERS
+        ==========
+
+        callback:  Callable[[bool, bool, bool], None]
+            The function to be called when an IR sensor's state changes.
+            It must be of the following form:
+
+                name(left:  bool, middle:  bool, right:  bool) -> None
+
+            where "left", "middle" and "right" are the detection states
+            of the IR sensors.  Be aware that more than one sensor can
+            be True at any given time.
+
+            Callback functions should exit as soon as possible since
+            state changes can occur rapidly.
+        """
 
         if callback not in self._callbacks:
             self._callbacks.append(callback)
@@ -768,15 +897,31 @@ class LineTracker():
 
     def remove_callback(self,
                         callback:  Callable[[bool, bool, bool], None]) -> None:
+        """
+        Remove a prevously-added callback function.
+
+        Attempts to remove a callback function that isn't registered
+        will be silently ignored.
+
+        PARAMETERS
+        ==========
+
+        callback:  Callable[[bool, bool, bool], None]
+            The callback function to be removed.  It must be of the
+            following form:
+
+                name(left:  bool, middle:  bool, right:  bool) -> None
+        """
+
 
         if callback in self._callbacks:
             self._callbacks.remove(callback)
 
 # ---------------------------------------------------------------------
 
-    def _monitor(self) -> None:
+    def _on_change(self) -> None:
         for listener in self._callbacks:
-            listener(self.left(), self.middle(), self.right())
+            listener(self.left, self.middle, self.right)
 
 # ======================================================================
 # BUZZERACTIVE CLASS DEFINITION
