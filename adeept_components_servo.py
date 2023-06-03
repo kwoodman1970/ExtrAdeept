@@ -2,19 +2,9 @@
 """
 adeept_components_servo.py -- class for controlling Adeept HAT servos.
 
-HOW TO USE
-==========
-
-Add the following line to the top of your module:
+To use, add the following line to the top of your module:
 
     from adeept_components_servo import Servo
-
-The "Servo" class will then be availabele for instanciation.
-
-EXPORTS
-=======
-
-Servo:  class
 """
 
 # ======================================================================
@@ -48,146 +38,91 @@ class Servo:
     velocity (looks stiff and mechanical), and constant acceleration/
     deceleration (looks smooth and natural).
 
-    PROPERTIES
-    ==========
+    NOTE:  if an optional arguement for the constructor isn't provided
+    then the default value for the Adeept Micro Servo AD002 will be
+    used.  If you're using a different servo then consult its
+    documentation for the correct arguments.
 
+    Parameters
+    ----------
+    port_num:  int
+        The port on the PCA9685 controller that the servo is connected
+        to (0 to 15).
+
+    Attributes
+    ----------
     MIN_PWM:  int
-        The minimum PWM that the servo can move to.
-
     MAX_PWM:  int
-        The maximum PWM that the servo can move to.
-
     ANGLE_RANGE:  float
-        The number of degrees that the servo rotates between
-        "MIN_PWM" and "MAX_PWM".
+    pwm:  int
+    angle:  float
 
-    METHODS
-    =======
+    Other Parameters
+    ----------------
+    frequency:  int, default `class._DEFAULT_FREQUENCY`
+        The servo's PWM frequency (refer to the servo's specifications).
+    pwm_offset:  int, default 0
+        An adjustment for PWM values sent to the servo.
+    min_pwm:  int, default `class._DEFAULT_MIN_PWM`
+        The minumum PWM that can be sent to the servo (refer to the
+        servo's specifications, but can be higher to limit the servo's
+        range of motion).  Must be less than `max_pwm` (see below).
+    max_pwm:  int, default `class._DEFAULT_MAX_PWM`
+        The maximum PWM that can be sent to the servo (refer to the
+        servo's specifications, but can be lower to limit the servo's
+        range of motion).  Must be greater than `min_pwm` (see above).
+    angle_range:  float, default 180.0
+        The number of degrees that the servo rotates between `min_pwm`
+        and `max_pwm`.  Must be greater than 0.0.
+    initial_pwm:  int
+        The initial PWM to send to the servo (such as a starting
+        position or a home position).  The default value is
+        (`class._DEFAULT_MIN_PWM` + `class._DEFAULT_MAX_PWM`) // 2).
+        Must be between `min_pwm` and `max_pwm` (see above).
 
-    __init__() -> None
-        Prepare the servo for use.
-
-    move_to() -> None
-        Move the servo to a new position immediately.
-
-    move_by_velocity() -> None
-        Move the servo to a new position at a fixed velocity.
-
-    move_by_acceleration() -> None
-        Move the servo to a new position at a fixed acceleration.
-
-    stop_moving() -> None
-        Tell a servo to stop if it is moving.
-
-    wait() -> bool
-        Wait for a moving servo to be ready for a new position.
-
-    get_pwm() -> int
-        Get the servo's current PWM value.
-
-    get_angle() -> float
-        Get the servo's current angle.
-
-    power_down() -> None
-        Turn off the power to the servo so that it can rotate freely.
+    Raises
+    ------
+    ValueError
+        One or more arguments are invalid.
     """
 
-    # THE MATHEMATICS OF MOVEMENT
-    # ===========================
-    #
-    # Movement by constant velocity is based on the following well-known
-    # kinetics formulae:
-    #
-    #     d = v * t
-    #     v = d / t
-    #     t = d / v
-    #
-    # where "d" is distance, "v" is velocity and "t" is time.
-    #
-    # Movement by constant acceleration/deceleration is based on the
-    # following well-known kinetics formulae:
-    #
-    #     d = a * t^2 / 2
-    #     a = d * 2 / t^2
-    #     t = sqrt(d * 2 / a)
-    #
-    # where "d" is distance, "a" is acceleration and "t" is time.
-    # There's an acceleration phase & a deceleration phase, and the
-    # servo rotates half the required distance over half of required
-    # time in each phase.  With that consideration, the aforementioned
-    # formulae need to be re-written as:
-    #
-    #     d = a * t^2 / 4
-    #     a = d * 4 / t^2
-    #     t = sqrt(d / a) * 2
-    #
-    # where "d" is (total) distance, "a" is acceleration and "t" is
-    # (total) time (deceleration is the negative of acceleration).
-    #
-    # Many methods in this class include calculations based on these six
-    # formulae, substituting PWM or angle for "d".
-    #
-    # CLASS PRIVATE PROPERTIES
-    # ========================
-    #
+    # Class Private Attibutes
+    # -----------------------
     # _DEFAULT_FREQUENCY:  int
     #     The Adeept Micro Servo AD002's PWM frequency.
-    #
     # _DEFAULT_MIN_PWM:  int
     #     The Adeept Micro Servo AD002's minumum PWM.
-    #
     # _DEFAULT_MAX_PWM:  int
     #     The Adeept Micro Servo AD002's maximum PWM.
-    #
     # _DEFAULT_ANGLE_RANGE:  float
     #     The number of degrees that the Adeept Micro Servo AD002 can
     #     rotate.
-    #
     # _MOVE_INTERVAL:  float
     #     The interval between sending new PWM's to the servo.  This
     #     value was arrived at through experimentation.
     #
-    # PRIVATE PROPERTIES
-    # ==================
-    #
+    # Private Attributes
+    # ------------------
     # _CONTROLLER:  Adafruit_PCA9685.PCA9685
     #     A reference to the PCA9685 controller.  This is the object
     #     that controls the servo motors.
-    #
     # _PORT_NUM:  int
     #     The port on the PCA9685 controller that the serve is
     #     connected to.
-    #
     # _PWM_OFFSET:  int
     #     The PWM offset to pass to the PCA9685 controller when
     #     setting a new PWM value.
-    #
     # _PWM_RANGE:  int
     #     MAX_PWM - MIN_PWM.  This constant is useful for some
     #     calculations.
-    #
     # _current_pwm:  int
     #     The PWM value that the servo was last set to.  Be aware that
     #     this value can be changed by other threads -- call ".wait(0)"
     #     to see if the servo is currently being moved.
-    #
     # _thread:  threading.Lock, None
     #     The thread that's currently moving the servo.
-    #
     # _stop_moving:  bool
     #     Has a request been made to stop a moving servo?
-    #
-    # PRIVATE METHODS
-    # ===============
-    #
-    # def _validated_pwm() -> int:
-    #     Validate either "pwm" or "angle" and return the PWM value.
-    #
-    # def _move_by_velocity() -> None:
-    #     Move this servo at a constant velocity in a thread.
-    #
-    # def _move_by_acceleration() -> None:
-    #     Move this servo at a constant ac/deceleration in a thread.
 
     # According to their documentation, the Adeept Micro Servo AD002's
     # duty cycle range is 100 to 560.  However, experimentation has
@@ -197,64 +132,18 @@ class Servo:
     _DEFAULT_FREQUENCY:    int   =  50
     _DEFAULT_MIN_PWM:      int   = 100
     _DEFAULT_MAX_PWM:      int   = 500
-    _DEFAULT_ANGLE_RANGE:  float = 180.0
     _MOVE_INTERVAL:        float =   0.01
 
-# ---------------------------------------------------------------------
+    # -----------------------------------------------------------------
 
     def __init__(self, port_num:  int, frequency:  int = _DEFAULT_FREQUENCY,
                  pwm_offset:  int = 0, min_pwm:  int = _DEFAULT_MIN_PWM,
                  max_pwm:  int = _DEFAULT_MAX_PWM,
-                 angle_range:  float = _DEFAULT_ANGLE_RANGE,
+                 angle_range:  float = 180.0,
                  initial_pwm:  int
                  = (_DEFAULT_MIN_PWM + _DEFAULT_MAX_PWM) // 2) -> None:
 
-        """
-        Prepare a PCA9685-connected servo for use.
-
-        PARAMETERS
-        ==========
-
-        port_num:  int
-            The port on the PCA9685 controller that the servo is
-            connected to (0 - 15).
-
-        frequency:  int
-            The servo's PWM frequency (refer to the servo's
-            specifications).
-
-        pwm_offset:  int
-            An adjustment for PWM values sent to the servo (typically
-            0).
-
-        min_pwm:  int
-            The minumum PWM that can be sent to the servo (refer to
-            the servo's specifications, but can be higher to limit the
-            servo's range of motion).  Must be less than "max_pwm" (see
-            below).
-
-        max_pwm:  int
-            The maximum PWM that can be sent to the servo (refer to
-            the servo's specifications, but can be lower to limit the
-            servo's range of motion).  Must be greater than "min_pwm"
-            (see above).
-
-        angle_range:  float
-            The number of degrees that the servo rotates between
-            "min_pwm" and "max_pwm" (typically 180.0).  Must be greater
-            than 0.0.
-
-        initial_pwm:  int
-            The initial PWM to send to the servo (such as a starting
-            position or a home position).  Must be between "min_pwm"
-            and "max_pwm" (see above).
-
-        RAISES
-        ======
-
-        ValueError
-            One or more arguments are invalid.
-        """
+        """Prepare a PCA9685-connected servo for use."""
 
         if (port_num < 0) or (port_num > 15):
             raise ValueError(f"\"port_num\" ({port_num}) must be from 0 to "
@@ -273,23 +162,21 @@ class Servo:
                              f"between \"min_pwm\" ({min_pwm}) and "
                              f"\"max_pwm\" ({max_pwm}).")
 
-        # Declare prviate properties.
+        # Declare private properties.
 
         self._CONTROLLER:  Adafruit_PCA9685.PCA9685 \
                            = Adafruit_PCA9685.PCA9685()
 
-        self._PORT_NUM:     int                      = port_num
-        self._PWM_OFFSET:   int                      = pwm_offset
-        self._PWM_RANGE:    int                      = max_pwm - min_pwm
-        self._current_pwm:  int                      = initial_pwm
-        self._thread:       Optional[threading.Lock] = None
-        self._stop_moving:  bool                     = False
+        self._PORT_NUM:     int                        = port_num
+        self._PWM_OFFSET:   int                        = pwm_offset
+        self._MIN_PWM:      int                        = min_pwm
+        self._MAX_PWM:      int                        = max_pwm
+        self._ANGLE_RANGE:  float                      = angle_range
+        self._PWM_RANGE:    int                        = max_pwm - min_pwm
+        self._current_pwm:  int                        = initial_pwm
+        self._thread:       Optional[threading.Thread] = None
+        self._stop_moving:  bool                       = False
 
-        # Declare public properties.
-
-        self.MIN_PWM:      int    = min_pwm
-        self.MAX_PWM:      int    = max_pwm
-        self.ANGLE_RANGE:  float  = angle_range
 
         # Set up the servo using "_SERVOS_LOCK" to ensure that no other
         # threads are accessing the PCA9685 controller at the same
@@ -299,7 +186,7 @@ class Servo:
             self._CONTROLLER.set_pwm_freq(frequency)
             self._CONTROLLER.set_pwm(port_num, pwm_offset, initial_pwm)
 
-# ---------------------------------------------------------------------
+    # -----------------------------------------------------------------
 
     def move_to(self, pwm:  Optional[int] = None,
                 angle:  Optional[float] = None) -> None:
@@ -311,22 +198,19 @@ class Servo:
         methods in this class) and will return after the signal is sent
         to the servo.
 
-        PARAMETERS
-        ==========
+        Either `pwm` or `angle` must be provided, but not both.
 
-        pwm:  int, None
-            The new PWM value to set the servo to.  If specified, it
-            must be between "self.MIN_PWM" and "self.MAX_PWM".
+        Parameters
+        ----------
+        pwm:  int, optional
+            The new PWM value to set the servo to.  If provided, it
+            must be between `self.MIN_PWM` and `self.MAX_PWM`.
+        angle:  float, optional
+            The new angle to set the servo to.  If provided, it must be
+            between 0 and `self.ANGLE_RANGE`.
 
-        angle:  float, None
-            The new angle to set the servo to.  If specified, it must be
-            between 0 and "self.ANGLE_RANGE".
-
-        Either "pwm" or "angle" must be specified, but not both.
-
-        RAISES
-        ======
-
+        Raises
+        ------
         ValueError
             One or more arguments are invalid.
         """
@@ -358,7 +242,7 @@ class Servo:
 
         return
 
-# ---------------------------------------------------------------------
+    # -----------------------------------------------------------------
 
     def move_by_velocity(self, pwm:  Optional[int] = None,
                          angle:  Optional[float] = None,
@@ -375,49 +259,53 @@ class Servo:
         This method operates asynchronously and returns immediately
         while a separate thread controls the servo.
 
-        PARAMETERS
-        ==========
+        Either `pwm` or `angle` must be provided, but not both.  Also,
+        exactly one of `velocity`, `angular_velocity`, `duration` or
+        `stop_time` must be provided.
 
-        pwm:  int, None
-            The new PWM value to set the servo to.  If specified, it
-            must be between "self.MIN_PWM" and "self.MAX_PWM".
-
-        angle:  float, None
-            The new angle to set the servo to.  If specified, it
-            must be between 0 and "self.ANGLE_RANGE".
-
-        velocity:  float, None
+        Parameters
+        ----------
+        pwm:  int, optional
+            The new PWM value to set the servo to.  If provided, it
+            must be between `self.MIN_PWM` and `self.MAX_PWM`.
+        angle:  float, optional
+            The new angle to set the servo to.  If provided, it
+            must be between 0 and `self.ANGLE_RANGE`.
+        velocity:  float, optional
             The speed (in PWM/s) at which the servo is to rotate.  If
-            specified, it must be greater than 0.
-
-        angular_velocity:  float, None
+            provided, it must be greater than 0.
+        angular_velocity:  float, optional
             The speed (in degrees/s) at which the servo is to rotate.
-            If specified, it must be greater than 0.0.
-
-        duration:  float, None
+            If provided, it must be greater than 0.0.
+        duration:  float, optional
             The time period over which the server is to rotate.  If
-            specified, it cannot be negative.  A value of 0.0 is the
-            same as moving the servo immediately (like the "moveTo()"
+            provided, it cannot be negative.  A value of 0.0 is the
+            same as moving the servo immediately (like the `moveTo()`
             method but done asynchronously.
-
-        stop_time:  float, None
+        stop_time:  float, optional
             The time at which the servo is to stop moving.
 
-        Either "pwm" or "angle" must be specified, but not both.  Also,
-        exactly one of "velocity", "angular_velocity", "duration" or
-        "stop_time" must be specified.
-
-        RAISES
-        ======
-
+        Raises
+        ------
         ValueError
             One or more arguments are invalid.
+
+        Notes
+        -----
+        Calculations for movement by constant velocity are based on the
+        following well-known kinetics formulae:
+
+            d = v * t
+            v = d / t
+            t = d / v
+
+        where `d` is distance, `v` is velocity and `t` is time.
         """
 
         # The thread method needs to know the PWM to move the servo to
         # and the time at which to stop moving.  The first argument is
         # easy to determine; the second will need to be calculated if
-        # "stop_time" wasn't specified.
+        # "stop_time" wasn't provided.
         #
         # VARIABLES
         # =========
@@ -455,7 +343,7 @@ class Servo:
         if num_args != 1:
             raise ValueError("One (and only one) of \"velocity\", "
                              "\"angular_velocity\", \"duration\" or "
-                             "\"stop_time\" must be specified.")
+                             "\"stop_time\" must be provided.")
 
         if velocity is not None:
             if velocity <= 0.0:
@@ -472,7 +360,7 @@ class Servo:
             else:
                 target_time = time.time() \
                               + abs(new_pwm - self._current_pwm) \
-                              / self._PWM_RANGE * self.ANGLE_RANGE \
+                              / self._PWM_RANGE * self._ANGLE_RANGE \
                               / angular_velocity
         elif duration is not None:
             if duration < 0.0:
@@ -494,7 +382,7 @@ class Servo:
 
         self._thread.start()
 
-# ---------------------------------------------------------------------
+    # -----------------------------------------------------------------
 
     def move_by_acceleration(self, pwm:  Optional[int] = None,
                              angle:  Optional[float] = None,
@@ -511,53 +399,69 @@ class Servo:
         This method operates asynchronously and returns immediately
         while a separate thread controls the servo.
 
-        PARAMETERS
-        ==========
+        Either `pwm` or `angle` must be provided, but not both.  Also,
+        exactly one of `acceleration`, `angular_acceleration`,
+        `duration` and `stop_time` must be provided.
 
-        pwm:  int, None
-            The new PWM value to set the servo to.  If specified, it
-            must be between "self.MIN_PWM" and "self.MAX_PWM".
-
-        angle:  float, None
-            The new angle to set the servo to.  If specified, it
-            must be between 0 and "self.ANGLE_RANGE".
-
-        acceleration:  float, None
+        Parameters
+        ----------
+        pwm:  int, optinoal
+            The new PWM value to set the servo to.  If provided, it
+            must be between `self.MIN_PWM` and `self.MAX_PWM`.
+        angle:  float, optional
+            The new angle to set the servo to.  If provided, it
+            must be between 0 and `self.ANGLE_RANGE`.
+        acceleration:  float, optional
             The rate of acceleration (in PWM/s^2) at which the servo is
             to rotate HALFWAY (after that, the servo will decelerate at
-            the same rate until it stops).  If specified, it must be
+            the same rate until it stops).  If provided, it must be
             greater than 0.
-
-        angular_acceleration:  float, None
+        angular_acceleration:  float, optional
             The rate of acceleration (in degrees/s^2) at which the servo
             is to rotate HALFWAY (after that, the servo will decelerate
-            at the same rate until it stops).  If specified, it must be
+            at the same rate until it stops).  If provided, it must be
             greater than 0.0.
-
-        duration:  float, None
+        duration:  float, optional
             The time period over which the server is to rotate.  If
-            specified, it cannot be negative.  A value of 0.0 is the
-            same as moving the servo immediately (like the "moveTo()"
+            provided, it cannot be negative.  A value of 0.0 is the
+            same as moving the servo immediately (like the `moveTo()`
             method but done asynchronously.
-
-        stop_time:  float, None
+        stop_time:  float, optional
             The time at which the servo is to stop moving.
 
-        Either "pwm" or "angle" must be specified, but not both.  Also,
-        exactly one of "acceleration", "angular_acceleration",
-        "duration" and "stop_time" must be specified.
-
-        RAISES
-        ======
-
+        Raises
+        ------
         ValueError
             One or more arguments are invalid.
+
+        Notes
+        -----
+        Calulations for movement by constant acceleration/deceleration
+        are based on the following well-known kinetics formulae:
+
+            d = a * t^2 / 2
+            a = d * 2 / t^2
+            t = sqrt(d * 2 / a)
+
+        where `d` is distance, `a` is acceleration and `t` is time.
+        However, there's an acceleration phase & a deceleration phase,
+        and the servo rotates half the provided/calculated distance over
+        half of provided/calculated time during each phase.  With that
+        consideration, the aforementioned formulae need to be re-written
+        as:
+
+            d = a * t^2 / 4
+            a = d * 4 / t^2
+            t = sqrt(d / a) * 2
+
+        where `d` is (total) distance, `a` is acceleration and `t` is
+        (total) time (deceleration is the negative of acceleration).
         """
 
         # The thread method needs to know the PWM to move the servo to
         # and the time at which to stop moving.  The first argument is
         # easy to determine; the second will need to be calculated if
-        # "stop_time" wasn't specified.
+        # "stop_time" wasn't provided.
         #
         # VARIABLES
         # =========
@@ -595,7 +499,7 @@ class Servo:
         if num_args != 1:
             raise ValueError("One (and only one) of \"acceleration\", "
                              "\"angular_acceleration\", \"duration\" or "
-                             "\"stop_time\" must be specified.")
+                             "\"stop_time\" must be provided.")
 
         if acceleration is not None:
             if acceleration <= 0.0:
@@ -612,7 +516,7 @@ class Servo:
             else:
                 target_time = time.time() \
                               + ((abs(new_pwm - self._current_pwm) \
-                              / self._PWM_RANGE * self.ANGLE_RANGE \
+                              / self._PWM_RANGE * self._ANGLE_RANGE \
                               / angular_acceleration) ** 0.5) * 2.0
         elif duration is not None:
             if duration < 0.0:
@@ -634,7 +538,7 @@ class Servo:
 
         self._thread.start()
 
-# ---------------------------------------------------------------------
+    # -----------------------------------------------------------------
 
     def stop_moving(self) -> None:
         """Tell a servo to stop if it is moving."""
@@ -644,7 +548,7 @@ class Servo:
 
         self._stop_moving = True
 
-# ---------------------------------------------------------------------
+    # -----------------------------------------------------------------
 
     def wait(self, timeout:  Optional[float] = None) -> bool:
         """
@@ -657,22 +561,20 @@ class Servo:
         sent to it before returning; if it isn't moving then it will
         return immediately.
 
-        PARAMETERS
-        ==========
-
-        timeout:  float, None
-            How long to wait before returning early.  If specified then
+        Parameters
+        ----------
+        timeout:  float, optional
+            How long to wait before returning early.  If provided then
             it must be at least 0.0
 
-        RETURNS
-        =======
+        Returns
+        -------
+        bool
+            True if the servo is ready to be given a new position, and
+            False if it isn't.
 
-        True if the servo is ready to be given a new position, and False
-        if it isn't.
-
-        RAISES
-        ======
-
+        Raises
+        ------
         ValueError
             One or more arguments are invalid.
         """
@@ -692,36 +594,7 @@ class Servo:
 
         return ended
 
-# ---------------------------------------------------------------------
-
-    def get_pwm(self) -> int:
-        """
-        Get the servo's current PWM value.
-
-        RETURNS
-        =======
-
-        The servo's curret PWM.
-        """
-
-        return self._current_pwm
-
-# ---------------------------------------------------------------------
-
-    def get_angle(self) -> float:
-        """
-        Get the servo's current angle.
-
-        RETURNS
-        =======
-
-        The servo's curret angle.
-        """
-
-        return (self._current_pwm - self.MIN_PWM) / self._PWM_RANGE \
-               * self.ANGLE_RANGE
-
-# ---------------------------------------------------------------------
+    # -----------------------------------------------------------------
 
     def power_down(self) -> None:
         """
@@ -736,7 +609,83 @@ class Servo:
         with _SERVOS_LOCK:
             self._CONTROLLER.set_pwm(self._PORT_NUM, self._PWM_OFFSET, 0)
 
-# ---------------------------------------------------------------------
+    # -----------------------------------------------------------------
+
+    @property
+    def MIN_PWM(self) -> int:
+        """
+        Get the servo's minimum PWM value.
+
+        Returns
+        -------
+        int
+            The servo's minimum PWM value.
+        """
+
+        return self._MIN_PWM
+
+    # -----------------------------------------------------------------
+
+    @property
+    def MAX_PWM(self) -> int:
+        """
+        Get the servo's maximum PWM value.
+
+        Returns
+        -------
+        int
+            The servo's maximum PWM value.
+        """
+
+        return self._current_pwm
+
+    # -----------------------------------------------------------------
+
+    @property
+    def ANGLE_RANGE(self) -> int:
+        """
+        Get the servo's angle range (in degrees).
+
+        Returns
+        -------
+        float
+            The servo's angle range (in degrees).
+        """
+
+        return self._ANGLE_RANGE
+
+    # -----------------------------------------------------------------
+
+    @property
+    def pwm(self) -> int:
+        """
+        Get the servo's current PWM value.
+
+        Returns
+        -------
+        int
+            The servo's curret PWM value.
+        """
+
+        return self._current_pwm
+
+    # -----------------------------------------------------------------
+
+    @property
+    def angle(self) -> float:
+        """
+        Get the servo's current angle.
+
+        Returns
+        -------
+        float
+            The servo's curret angle.
+        """
+
+        return (self._current_pwm - self._MIN_PWM) / self._PWM_RANGE \
+               * self._ANGLE_RANGE
+
+    # -----------------------------------------------------------------
 
     def _validated_pwm(self, pwm:  Optional[int],
                       angle:  Optional[float]) -> int:
@@ -752,14 +701,14 @@ class Servo:
         # ==========
         #
         # pwm:  int, None
-        #     The new PWM value to set the servo to.  If specified, it
+        #     The new PWM value to set the servo to.  If provided, it
         #     must be between "self.MIN_PWM" and "self.MAX_PWM".
         #
         # angle:  float, None
-        #     The new angle to set the servo to.  If specified, it
+        #     The new angle to set the servo to.  If provided, it
         #     must be between 0 and "self.ANGLE_RANGE".
         #
-        # Either "pwm" or "angle" must be specified, but not both.
+        # Either "pwm" or "angle" must be provided, but not both.
         #
         # RETURNS
         # =======
@@ -776,27 +725,27 @@ class Servo:
 
         if (pwm is None) == (angle is None):
             raise ValueError("Either \"pwm\" or \"angle\" (but not "
-                             "both) must be specified.")
+                             "both) must be provided.")
 
         if pwm is not None:
-            if (pwm < self.MIN_PWM) or (pwm > self.MAX_PWM):
+            if (pwm < self._MIN_PWM) or (pwm > self._MAX_PWM):
                 raise ValueError(f"\"pwm\" ({pwm}) must be between "
-                                 f"\".MIN_PWM\" ({self.MIN_PWM}) and "
-                                 f"\".MAX_PWM\" ({self.MAX_PWM}).")
+                                 f"\".MIN_PWM\" ({self._MIN_PWM}) and "
+                                 f"\".MAX_PWM\" ({self._MAX_PWM}).")
 
             new_pwm = pwm
         else:
-            if (angle < 0.0) or (angle > self.ANGLE_RANGE):
+            if (angle < 0.0) or (angle > self._ANGLE_RANGE):
                 raise ValueError(f"\"angle\" ({angle}) must be "
                                  f"between 0 and \".ANGLE_RANGE\" "
-                                 f"({self.ANGLE_RANGE}).")
+                                 f"({self._ANGLE_RANGE}).")
 
-            new_pwm = round(angle / self.ANGLE_RANGE * self._PWM_RANGE) \
-                      + self.MIN_PWM
+            new_pwm = round(angle / self._ANGLE_RANGE * self._PWM_RANGE) \
+                      + self._MIN_PWM
 
         return new_pwm
 
-# ---------------------------------------------------------------------
+    # -----------------------------------------------------------------
 
     def _move_by_velocity(self, new_pwm:  int, end_time:  float) -> None:
         # Move this servo at a constant velocity in a thread.
@@ -872,7 +821,7 @@ class Servo:
             self._CONTROLLER.set_pwm(
                 self._PORT_NUM, self._PWM_OFFSET, new_pwm)
 
-# ---------------------------------------------------------------------
+    # -----------------------------------------------------------------
 
     def _move_by_acceleration(self, new_pwm:  int, end_time:  float) -> None:
         # Move this servo at a constant ac/deceleration in a thread.
