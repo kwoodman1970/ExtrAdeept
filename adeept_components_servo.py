@@ -13,7 +13,7 @@ To use, add the following line to the top of your module:
 
 import threading
 import time
-from typing import Optional, Union
+from typing import Callable, Optional, Union
 
 import Adafruit_PCA9685
 
@@ -139,7 +139,7 @@ class Servo:
     _DEFAULT_ANGLE_RANGE:  float = 180.0
     _MOVE_INTERVAL:        float =   0.01
 
-    # -----------------------------------------------------------------
+    # -------------------------------------------------------------------
 
     def __init__(self, port_num:  int, frequency:  int = _DEFAULT_FREQUENCY,
                  pwm_offset:  int = 0, min_pwm:  int = _DEFAULT_MIN_PWM,
@@ -190,7 +190,7 @@ class Servo:
             self._CONTROLLER.set_pwm_freq(frequency)
             self._CONTROLLER.set_pwm(port_num, pwm_offset, initial_pwm)
 
-    # -----------------------------------------------------------------
+    # ------------------------------------------------------------------
 
     def move_to(self, pwm:  Optional[int] = None,
                 angle:  Optional[float] = None) -> None:
@@ -238,7 +238,25 @@ class Servo:
 
         return
 
-    # -----------------------------------------------------------------
+    # ------------------------------------------------------------------
+
+    def move_by(self, timing_function:  Callable[[int, float, float], int],
+                stop_time:  float,
+                pwm:  Optional[int] = None,
+                angle:  Optional[float] = None) -> None:
+
+        new_pwm = self._validated_pwm(pwm, angle)
+
+        self.stop_moving()
+        self.wait()
+
+        self._stop_moving = False
+        self._thread = threading.Thread(target = self._move_by,
+                                        args = (timing_function, new_pwm,
+                                                stop_time))
+
+        self._thread.start()
+    # ------------------------------------------------------------------
 
     def move_by_velocity(self, pwm:  Optional[int] = None,
                          angle:  Optional[float] = None,
@@ -249,6 +267,8 @@ class Servo:
 
         """
         Move the servo to a new position at a fixed velocity.
+
+        DEPRECATED -- use move_by(linear_timing, ...) instead.
 
         The servo will move in a stiff, mechanical-looking manner.
 
@@ -317,13 +337,11 @@ class Servo:
         #     The time that the servo is supposed to stop moving at
         #     (will be passed to the thread).
 
-        new_pwm:        int
-        num_time_args:  int = 0 if velocity is None else 1
-
         # Validate the method's arguments and determine the new PWM &
         # target time.
 
-        new_pwm = self._validated_pwm(pwm, angle)
+        new_pwm:        int = self._validated_pwm(pwm, angle)
+        num_time_args:  int = 0 if velocity is None else 1
 
         num_time_args += 0 if angular_velocity is None else 1
         num_time_args += 0 if duration is None else 1
@@ -360,18 +378,9 @@ class Servo:
         else:
             target_time = stop_time
 
-        # Stop the servo if it's moving, then start a new movement.
+        self.move_by(linear_timing, target_time, pwm = new_pwm)
 
-        self.stop_moving()
-        self.wait()
-
-        self._stop_moving = False
-        self._thread = threading.Thread(target = self._move_by_velocity,
-                                        args = (new_pwm, target_time))
-
-        self._thread.start()
-
-    # -----------------------------------------------------------------
+    # ------------------------------------------------------------------
 
     def move_by_acceleration(self, pwm:  Optional[int] = None,
                              angle:  Optional[float] = None,
@@ -382,6 +391,8 @@ class Servo:
 
         """
         Move the servo to a new position at a fixed acceleration.
+
+        DEPRECATED -- use move_by(ease_in_out_timing, ...) instead.
 
         The servo will move in a smooth, natural-looking manner.
 
@@ -466,19 +477,11 @@ class Servo:
         #     The time that the servo is supposed to stop moving at
         #     (will be passed to the thread).
 
-        new_pwm:        int
-        num_time_args:  int = 0 if acceleration is None else 1
-
         # Validate the method's arguments and determine the new PWM &
         # target time.
 
-        try:
-            new_pwm = self._validated_pwm(pwm, angle)
-        except ValueError:
-            # Make it look like this method generated this exception
-            # instead of the validator.
-
-            raise
+        new_pwm:  int       = self._validated_pwm(pwm, angle)
+        num_time_args:  int = 0 if acceleration is None else 1
 
         num_time_args += 0 if angular_acceleration is None else 1
         num_time_args += 0 if duration is None else 1
@@ -517,16 +520,9 @@ class Servo:
 
         # Stop the servo if it's moving, then start a new movement.
 
-        self.stop_moving()
-        self.wait()
+        self.move_by(easy_ease_timing, target_time, pwm = new_pwm)
 
-        self._stop_moving = False
-        self._thread = threading.Thread(target = self._move_by_acceleration,
-                                        args = (new_pwm, target_time))
-
-        self._thread.start()
-
-    # -----------------------------------------------------------------
+    # ------------------------------------------------------------------
 
     def stop_moving(self) -> None:
         """Tell the servo to stop if it is moving."""
@@ -536,7 +532,7 @@ class Servo:
 
         self._stop_moving = True
 
-    # -----------------------------------------------------------------
+    # ------------------------------------------------------------------
 
     def wait(self, timeout:  Optional[float] = None) -> bool:
         """
@@ -566,7 +562,7 @@ class Servo:
         Raises
         ------
         ValueError
-            One or more arguments are invalid.
+            `timeout`, if provided, is invalid.
         """
 
         # Variables
@@ -599,7 +595,7 @@ class Servo:
 
         return ended
 
-    # -----------------------------------------------------------------
+    # ------------------------------------------------------------------
 
     def power_down(self) -> None:
         """
@@ -616,7 +612,7 @@ class Servo:
         with _SERVOS_LOCK:
             self._CONTROLLER.set_pwm(self._PORT_NUM, self._PWM_OFFSET, 0)
 
-    # -----------------------------------------------------------------
+    # ------------------------------------------------------------------
 
     @property
     def MIN_PWM(self) -> int:
@@ -631,7 +627,7 @@ class Servo:
 
         return self._MIN_PWM
 
-    # -----------------------------------------------------------------
+    # ------------------------------------------------------------------
 
     @property
     def MAX_PWM(self) -> int:
@@ -646,7 +642,7 @@ class Servo:
 
         return self._current_pwm
 
-    # -----------------------------------------------------------------
+    # ------------------------------------------------------------------
 
     @property
     def ANGLE_RANGE(self) -> int:
@@ -661,7 +657,7 @@ class Servo:
 
         return self._ANGLE_RANGE
 
-    # -----------------------------------------------------------------
+    # ------------------------------------------------------------------
 
     @property
     def pwm(self) -> int:
@@ -676,7 +672,7 @@ class Servo:
 
         return self._current_pwm
 
-    # -----------------------------------------------------------------
+    # ------------------------------------------------------------------
 
     @property
     def angle(self) -> float:
@@ -692,7 +688,7 @@ class Servo:
         return (self._current_pwm - self._MIN_PWM) / self._PWM_RANGE \
                * self._ANGLE_RANGE
 
-    # -----------------------------------------------------------------
+    # ------------------------------------------------------------------
 
     def _validated_pwm(self, pwm:  Optional[int],
                       angle:  Optional[float]) -> int:
@@ -701,7 +697,7 @@ class Servo:
         #
         # Make sure that either `pwm` or `angle` (but not both) are
         # within the servo's range and return the appropriate PWM
-        # value.  This is a convience for methods that handle the
+        # value.  This is a convenience for methods that handle the
         # servo's movements.
         #
         # Parameters
@@ -755,26 +751,28 @@ class Servo:
 
         return new_pwm
 
-    # -----------------------------------------------------------------
+    # ------------------------------------------------------------------
 
-    def _move_by_velocity(self, new_pwm:  int, end_time:  float) -> None:
-        # Move this servo at a constant velocity in a thread.
+    def _move_by(self, timing_function:  Callable[[int, float, float], int],
+                 new_pwm:  int, stop_time:  float) -> None:
+
+        # Move the servo according to a timing function.
         #
         # This method is intended to be a thread body.
         #
-        # PARAMETERS
-        # ==========
+        # Parameters
+        # ----------
         #
         # new_pwm:  int
         #     The final PWM value to set the servo to.  It must be
         #     between "self.MIN_PWM" and "self.MAX_PWM".
         #
-        # end_time:  float
+        # stop_time:  float
         #     The time at which to stop moving the servo.  If it's in
         #     the past then movement is instantaneous.
         #
-        # VARIABLES
-        # =========
+        # Variables
+        # ---------
         #
         # num_secs:  float
         #     The total time needed to complete the movement.
@@ -789,156 +787,74 @@ class Servo:
         # current_secs:  float:
         #     The current time in the movement.
 
-        num_secs = end_time - time.time()
+        duration:  float   = stop_time - time.time()
+        start_pwm:  int    = self._current_pwm
+        pwm_range:  int    = new_pwm - start_pwm
+        start_time:  float = time.time()
+        time_index:  float = self._MOVE_INTERVAL
 
-        if num_secs > self._MOVE_INTERVAL * 4:
-            # The formula for constant velocity maps to the local
-            # variables as follows:
-            #
-            #     .current_pwm = start_pwm + velocity * current_secs
-
-            velocity     = (new_pwm - self._current_pwm) / num_secs
-            start_pwm    = self._current_pwm
-            start_time   = time.time()
-            current_secs = self._MOVE_INTERVAL
-
-            # This is the main loop.  During each iteration, the servo's
-            # position is set to the PWM according to the aforementioned
-            # formula.  The thread then sleeps for "MOVE_INTERVAL"
-            # seconds.
-            #
-            # The loop exits when "end_time" is reached or when
-            # "stop_moving" is set.
-
-            while not self._stop_moving and (self._current_pwm != new_pwm):
-                if (start_time + current_secs) < end_time:
-                    self._current_pwm = start_pwm \
-                                        + round(velocity * current_secs)
-                else:
-                    self._current_pwm = new_pwm
-
-                with _SERVOS_LOCK:
-                    self._CONTROLLER.set_pwm(
-                        self._PORT_NUM, self._PWM_OFFSET, self._current_pwm)
-
-                time.sleep(max(0, start_time + current_secs - time.time()))
-
-                current_secs += self._MOVE_INTERVAL
-        else:
-            self._current_pwm = new_pwm
-
-        with _SERVOS_LOCK:
-            self._CONTROLLER.set_pwm(
-                self._PORT_NUM, self._PWM_OFFSET, new_pwm)
-
-    # -----------------------------------------------------------------
-
-    def _move_by_acceleration(self, new_pwm:  int, end_time:  float) -> None:
-        # Move this servo at a constant ac/deceleration in a thread.
+        # This is the main loop.  During each iteration, the servo's
+        # position is set to the PWM according to the timing function.
+        # The thread then sleeps for "self._MOVE_INTERVAL" seconds.
         #
-        # This method is intended to be a thread body.
-        #
-        # PARAMETERS
-        # ==========
-        #
-        # new_pwm:  int
-        #     The final PWM value to set the servo to.  It must be
-        #     between "self.MIN_PWM" and "self.MAX_PWM".
-        #
-        # end_time:  float
-        #     The time at which to stop moving the servo.  If it's in
-        #     the past then movement is instantaneous.
-        #
-        # VARIABLES
-        # =========
-        #
-        # num_secs:  float
-        #     The total time needed to complete the movement.
-        #
-        # acceleration:  float
-        #     How fast the servo should rotate during the movement (in
-        #     PWM's/second^2)
-        #
-        # start_pwm:  integer
-        #     The movement's initial PWM.
-        #
-        # halfway_point:  integer
-        #     The PWM value that's halfway between "start_pwm" and
-        #     "new_pwm".
-        #
-        # halfway_time:  float
-        #     The time at which acceleration changes to deceleration.
-        #
-        # current_secs:  float:
-        #     The current time in the movement.
+        # The loop exits when "end_time" is reached or when
+        # "stop_moving" is set.
 
-        num_secs = end_time - time.time()
-
-        if num_secs > self._MOVE_INTERVAL * 4:
-            # The formula for constant acceleration maps to the local
-            # variables as follows:
-            #
-            #     .current_pwm = start_pwm
-            #                    + acceleration * current_secs ^ 2 / 2
-            #
-            # Deceleration is the negative of acceleration.
-
-            acceleration  = (new_pwm - self._current_pwm) * 4.0 \
-                            / (num_secs ** 2)
-            start_pwm     = self._current_pwm
-            start_time    = time.time()
-            halfway_point = round((start_pwm + new_pwm) / 2)
-            halfway_time  = start_time + (num_secs / 2.0)
-            current_secs  = self._MOVE_INTERVAL
-
-            # This is the loop for the acceleration stage.  During each
-            # iteration, the servo's position is set to the PWM
-            # according to the aforementioned formula.  The thread then
-            # sleeps for "MOVE_INTERVAL" seconds.
-            #
-            # The loop exits when "end_time" is reached or when
-            # "stop_moving" is set.
-
-            while not self._stop_moving \
-                    and (self._current_pwm != halfway_point):
-                if (start_time + current_secs) < halfway_time:
-                    self._current_pwm = \
-                        start_pwm \
-                        + round(acceleration * (current_secs ** 2) / 2)
-                else:
-                    self._current_pwm = halfway_point
-
-                with _SERVOS_LOCK:
-                    self._CONTROLLER.set_pwm(
-                        self._PORT_NUM, self._PWM_OFFSET, self._current_pwm)
-
-                time.sleep(max(0, start_time + current_secs - time.time()))
-
-                current_secs += self._MOVE_INTERVAL
-
-            # This is the loop for the deceleration stage.  It works
-            # like the loop for the acceleration phase but slows the
-            # servo down instead of speeding it up.
-
-            while not self._stop_moving and (self._current_pwm != new_pwm):
-                if (start_time + current_secs) < end_time:
-                    self._current_pwm = new_pwm \
-                        - round(acceleration * (num_secs - current_secs) ** 2 \
-                        / 2)
-                else:
-                    self._current_pwm = new_pwm
-
-                with _SERVOS_LOCK:
-                    self._CONTROLLER.set_pwm(
-                        self._PORT_NUM, self._PWM_OFFSET, self._current_pwm)
-
-                time.sleep(max(0, start_time + current_secs - time.time()))
-
-                current_secs += self._MOVE_INTERVAL
-
-        else:
-            self._current_pwm = new_pwm
+        while not self._stop_moving and (time_index < duration):
+            self._current_pwm = timing_function(pwm_range, duration,
+                                                        time_index) \
+                                + start_pwm
+            self._current_pwm = min(max(self._current_pwm, self.MIN_PWM),
+                                    self.MAX_PWM)
 
             with _SERVOS_LOCK:
-                self._CONTROLLER.set_pwm(
-                    self._PORT_NUM, self._PWM_OFFSET, new_pwm)
+                self._CONTROLLER.set_pwm(self._PORT_NUM, self._PWM_OFFSET,
+                                         self._current_pwm)
+
+            time.sleep(max(0, start_time + time_index - time.time()))
+
+            time_index += self._MOVE_INTERVAL
+
+        self._current_pwm = new_pwm
+
+        with _SERVOS_LOCK:
+            self._CONTROLLER.set_pwm(self._PORT_NUM, self._PWM_OFFSET,
+                                     self._current_pwm)
+
+# ----------------------------------------------------------------------
+
+# https://animost.com/tutorials/timing-and-spacing-principle/#How_to_Implement_Spacing_Into_an_Animation
+
+def linear_timing(pwm_range:  int, duration:  float, current_time: float) -> int:
+    velocity = pwm_range / duration
+
+    return round(velocity * current_time)
+
+# ----------------------------------------------------------------------
+
+def ease_out_timing(pwm_range:  int, duration:  float, current_time: float) -> int:
+    # d = a * t^2
+    # a = d / t^2
+
+    acceleration  = pwm_range / (duration ** 2)
+
+    return round(acceleration * (current_time ** 2))
+
+# ----------------------------------------------------------------------
+
+def ease_in_timing(pwm_range:  int, duration:  float, current_time: float) -> int:
+    return pwm_range - ease_out_timing(pwm_range, duration,
+                                       duration - current_time)
+
+# ----------------------------------------------------------------------
+
+def easy_ease_timing(pwm_range:  int, duration:  float, current_time: float) -> int:
+    half_pwm_range = pwm_range // 2
+    half_duration  = duration / 2.0
+
+    if current_time <= half_duration:
+        return ease_out_timing(half_pwm_range, half_duration, current_time)
+    else:
+        return ease_in_timing(pwm_range - half_pwm_range, half_duration,
+                              current_time - half_duration) \
+               + half_pwm_range
