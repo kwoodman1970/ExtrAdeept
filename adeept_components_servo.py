@@ -17,6 +17,9 @@ from typing import Callable, Optional, Union
 
 import Adafruit_PCA9685
 
+from adeept_position_functions import PositionFunction, linear_timing, \
+    easy_ease_timing
+
 # ======================================================================
 # PRIVATE CONSTANT
 # ======================================================================
@@ -240,8 +243,7 @@ class Servo:
 
     # ------------------------------------------------------------------
 
-    def move_by(self, timing_function:  Callable[[int, float, float], int],
-                stop_time:  float,
+    def move_by(self, timing_function:  PositionFunction, stop_time:  float,
                 pwm:  Optional[int] = None,
                 angle:  Optional[float] = None) -> None:
 
@@ -821,40 +823,3 @@ class Servo:
             self._CONTROLLER.set_pwm(self._PORT_NUM, self._PWM_OFFSET,
                                      self._current_pwm)
 
-# ----------------------------------------------------------------------
-
-# https://animost.com/tutorials/timing-and-spacing-principle/#How_to_Implement_Spacing_Into_an_Animation
-
-def linear_timing(pwm_range:  int, duration:  float, current_time: float) -> int:
-    velocity = pwm_range / duration
-
-    return round(velocity * current_time)
-
-# ----------------------------------------------------------------------
-
-def ease_out_timing(pwm_range:  int, duration:  float, current_time: float) -> int:
-    # d = a * t^2
-    # a = d / t^2
-
-    acceleration  = pwm_range / (duration ** 2)
-
-    return round(acceleration * (current_time ** 2))
-
-# ----------------------------------------------------------------------
-
-def ease_in_timing(pwm_range:  int, duration:  float, current_time: float) -> int:
-    return pwm_range - ease_out_timing(pwm_range, duration,
-                                       duration - current_time)
-
-# ----------------------------------------------------------------------
-
-def easy_ease_timing(pwm_range:  int, duration:  float, current_time: float) -> int:
-    half_pwm_range = pwm_range // 2
-    half_duration  = duration / 2.0
-
-    if current_time <= half_duration:
-        return ease_out_timing(half_pwm_range, half_duration, current_time)
-    else:
-        return ease_in_timing(pwm_range - half_pwm_range, half_duration,
-                              current_time - half_duration) \
-               + half_pwm_range
