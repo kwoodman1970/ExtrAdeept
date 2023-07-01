@@ -17,8 +17,8 @@ from typing import Callable, Optional, Union
 
 import Adafruit_PCA9685
 
-from adeept_position_functions import PositionFunction, linear_timing, \
-    easy_ease_timing
+from adeept_position_functions import PositionFunction, linear_position, \
+    easy_ease_position
 
 # ======================================================================
 # PRIVATE CONSTANT
@@ -270,7 +270,7 @@ class Servo:
         """
         Move the servo to a new position at a fixed velocity.
 
-        DEPRECATED -- use move_by(linear_timing, ...) instead.
+        DEPRECATED -- use move_by(linear_position, ...) instead.
 
         The servo will move in a stiff, mechanical-looking manner.
 
@@ -380,7 +380,7 @@ class Servo:
         else:
             target_time = stop_time
 
-        self.move_by(linear_timing, target_time, pwm = new_pwm)
+        self.move_by(linear_position, target_time, pwm = new_pwm)
 
     # ------------------------------------------------------------------
 
@@ -522,7 +522,7 @@ class Servo:
 
         # Stop the servo if it's moving, then start a new movement.
 
-        self.move_by(easy_ease_timing, target_time, pwm = new_pwm)
+        self.move_by(easy_ease_position, target_time, pwm = new_pwm)
 
     # ------------------------------------------------------------------
 

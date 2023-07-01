@@ -713,10 +713,10 @@ class LineTracker():
         METHODS
         =======
 
-        __init__()
+        __init__() -> None:
             Prepare an infred sensor for use.
 
-        _monitor()
+        _monitor() -> None:
             Event handler for when the infrared sensor changes state.
 
 
@@ -782,6 +782,26 @@ class LineTracker():
 
     def __init__(self, pin_left:  int, pin_middle:  int, pin_right:  int,
                  line_is_white:  bool = False) -> None:
+        """
+        Manage an infrared sensor.
+
+        METHODS
+        =======
+
+        __init__()
+            Prepare an infred sensor for use.
+
+        _monitor()
+            Event handler for when the infrared sensor changes state.
+
+
+        PROPERTIES
+        ==========
+
+        state:  int
+            The state of the IR sensor (GPIO.LOW or GPIO.HIGH).
+        """
+
 
         self._PIN_LEFT:   self._IRSensor = self._IRSensor(pin_left,
                                                           self._on_change)

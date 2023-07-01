@@ -1,13 +1,20 @@
 """
 adeept_position_functions.py -- calculate positions based on timing.
 
-A position function calculates a position when given a range, a duration
-and a time index.  These functions are typically called at regular
-intervals.
+A position function calculates a position when given an interval (a.k.a.
+range or distance), a duration and a time index.  These functions are
+typically called at regular intervals.
 
-To use, add the following line to the top of your module:
+To use one or more of the position functions in this module, add the
+following line to the top of your module:
 
     from adeept_position_functions import *list_of_functions*
+
+If you want to create your own routine that calls a position function
+then add the following line to the top of your module in order to use
+`PositionFunction` as a type hint:
+
+    from adeept_position_functions import PositionFunction
 
 Notes
 -----
@@ -58,29 +65,37 @@ Position function template.
 This is the format for all position calback functions used in this
 project.
 
+If the function were to be graphed then the origin would be (0.0, 0.0)
+and the endpoint would be (`duration`, `interval`).
+
+A position function need not be pure, but (in the majority of cases) it
+should return the same result for the same inputs as long as something
+is using it.
+
 Parameters
 ----------
-range:  int
-    A zero-based range (can be negative).
+interval:  int
+    A zero-based interval (can be negative).
 duration:  float
-    a zero-based duration (will always be greater than zero).
+    A zero-based duration (will always be greater than zero).
 time_index:  float
     The point in time to calculate the position at (will always be
-    within `duration`).
+    within the interval [0.0, `duration`]).
 
 Returns
 -------
 int
-    The resulting calculated position (need not be within `range`).
+    The resulting calculated position (need not be within the interval
+    [0 .. `interval`]).
 """
 
 # ----------------------------------------------------------------------
 
-def linear_position(range:  int, duration:  float, time_index: float) -> int:
+def linear_position(interval:  int, duration:  float, time_index: float) -> int:
     """
     Calculate a position based on constant velocity.
 
-    See `TimingFunction` for information on parameters and return
+    See `PositionFunction` for information on parameters and return
     values.
 
     Notes
@@ -96,17 +111,18 @@ def linear_position(range:  int, duration:  float, time_index: float) -> int:
     assert duration > 0.0
     assert (time_index >= 0.0) and (time_index <= duration)
 
-    velocity = range / duration
+    velocity = interval / duration
 
     return round(velocity * time_index)
 
 # ----------------------------------------------------------------------
 
-def ease_out_position(range:  int, duration:  float, time_index: float) -> int:
+def ease_out_position(interval:  int, duration:  float,
+                      time_index: float) -> int:
     """
     Calculate a position based on constant acceleration.
 
-    See `TimingFunction` for information on parameters and return
+    See `PositionFunction` for information on parameters and return
     values.
 
     Notes
@@ -122,17 +138,18 @@ def ease_out_position(range:  int, duration:  float, time_index: float) -> int:
     assert duration > 0.0
     assert (time_index >= 0.0) and (time_index <= duration)
 
-    acceleration = range / (duration ** 2)
+    acceleration = interval / (duration ** 2)
 
     return round(acceleration * (time_index ** 2))
 
 # ----------------------------------------------------------------------
 
-def ease_in_position(range:  int, duration:  float, time_index: float) -> int:
+def ease_in_position(interval:  int, duration:  float,
+                     time_index: float) -> int:
     """
     Calculate a position based on constant deceleration.
 
-    See `TimingFunction` for information on parameters and return
+    See `PositionFunction` for information on parameters and return
     values.
 
     Notes
@@ -143,34 +160,34 @@ def ease_in_position(range:  int, duration:  float, time_index: float) -> int:
     assert duration > 0.0
     assert (time_index >= 0.0) and (time_index <= duration)
 
-    return range - ease_out_position(range, duration,
+    return interval - ease_out_position(interval, duration,
                                        duration - time_index)
 
 # ----------------------------------------------------------------------
 
-def easy_ease_position(range:  int, duration:  float,
+def easy_ease_position(interval:  int, duration:  float,
                        time_index: float) -> int:
     """
     Calculate a position based on constant acceleration & deceleration.
 
-    See `TimingFunction` for information on parameters and return
+    See `PositionFunction` for information on parameters and return
     values.
 
     Notes
     -----
-    Constant acceleration occurs over the first half of `duration` &
-    `range` and deceleration over the second half.
+    Constant acceleration occurs over the first half of `duration` and
+    deceleration over the second half.
     """
 
     assert duration > 0.0
     assert (time_index >= 0.0) and (time_index <= duration)
 
-    half_range     = range // 2
-    half_duration  = duration / 2.0
+    half_interval = interval // 2
+    half_duration = duration / 2.0
 
     if time_index <= half_duration:
-        return ease_out_movement(half_range, half_duration, time_index)
+        return ease_out_position(half_interval, half_duration, time_index)
     else:
-        return ease_in_position(range - half_range, half_duration,
-                              time_index - half_duration) \
-               + half_range
+        return ease_in_position(interval - half_interval, half_duration,
+                                time_index - half_duration) \
+               + half_interval
