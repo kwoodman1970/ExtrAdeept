@@ -1,4 +1,3 @@
-#!/usr/bin/python3
 """
 adeept_components.py -- classes for controlling Adeept HAT components.
 
@@ -14,15 +13,16 @@ This module contains classes for controlling the following components:
   * IIC devices (e.g. OLED displays)
   * acceleration sensors
 
+To use one or more of the classes this module (see the **Class
+Listings** section), add the following line to the top of your module::
+
+    from adeept_components import *list_of_classes*
+
 Different HAT's support different sets of components.
 
-HOW TO USE
-==========
-
-EXPORTS
-=======
-
-DriveMotor:  Class
+Class Listings
+--------------
+DriveMotor
 """
 
 # ======================================================================
@@ -40,13 +40,38 @@ from rpi_ws281x import Adafruit_NeoPixel
 # PRIVATE FUNCTIONS
 # ======================================================================
 
-def _validate_gpio_pin_number(pin_number:  int, var_name:  str) -> None:
-    GPIO_MIN_PIN = 0
-    GPIO_MAX_PIN = 27
+def _validate_gpio_pin_number(pin_number:  int, parameter_name:  str) -> None:
+    # Confirm that a pin number is a valid GPIO BCM pin number.
+    #
+    # Parameters
+    # ----------
+    # pin_number:  int
+    #     The pin number to validate
+    # parameter_name:  str
+    #     The name of the caller's parameter that `pin_number` came
+    #     from.  If an exception is raised then this will be included in
+    #     its error message.
+    #
+    # Raises
+    # ------
+    # ValueError
+    #     `pin_number` isn't a valid GPIO BCM pin number.
+
+    # Valid GPIO BCM pin numbers are all within a specific range.
+    #
+    # Constants
+    # ---------
+    # GPIO_MIN_PIN:  int
+    #     The minimum valid GPIO BCM pin number.
+    # GPIO_MAX_PIN:  int
+    #     The maximum valid GPIO BCM pin number.
+
+    GPIO_MIN_PIN: int = 0
+    GPIO_MAX_PIN: int = 27
 
     if (pin_number < GPIO_MIN_PIN) or (pin_number > GPIO_MAX_PIN):
-        raise ValueError(f"\"${var_name}\" ({pin_number}) must be from "
-                            f"${GPIO_MIN_PIN} to ${GPIO_MIN_PIN}")
+        raise ValueError(f"\"${parameter_name}\" ({pin_number}) must be from "
+                         f"${GPIO_MIN_PIN} to ${GPIO_MIN_PIN}")
 
 # ======================================================================
 # DRIVEMOTOR CLASS DEFINITION

@@ -5,16 +5,29 @@ A position function calculates a position when given an interval (a.k.a.
 range or distance), a duration and a time index.  These functions are
 typically called at regular intervals.
 
-To use one or more of the position functions in this module, add the
-following line to the top of your module:
+To use one or more of the position functions in this module (see the
+**Routine Listings** section), add the following line to the top of your
+module::
 
     from adeept_position_functions import *list_of_functions*
 
 If you want to create your own routine that calls a position function
 then add the following line to the top of your module in order to use
-`PositionFunction` as a type hint:
+`PositionFunction` as a type hint::
 
     from adeept_position_functions import PositionFunction
+
+If you want to create your own position function the be sure that its
+definition complies with `PositionFunction`.
+
+Routine Listings
+----------------
+`linear_position`
+`ease_out_position`
+`ease_in_position`
+`easy_ease_position`
+    Four pre-built position functions for common motions (see the
+    **Notes** section).
 
 Notes
 -----
@@ -111,9 +124,14 @@ def linear_position(interval:  int, duration:  float, time_index: float) -> int:
     assert duration > 0.0
     assert (time_index >= 0.0) and (time_index <= duration)
 
-    velocity = interval / duration
+    # Constants
+    # ---------
+    # VELOCITY:  float
+    #     The speed at which the position changes over `duration`.
 
-    return round(velocity * time_index)
+    VELOCITY:  float = interval / duration
+
+    return round(VELOCITY * time_index)
 
 # ----------------------------------------------------------------------
 
@@ -138,9 +156,14 @@ def ease_out_position(interval:  int, duration:  float,
     assert duration > 0.0
     assert (time_index >= 0.0) and (time_index <= duration)
 
-    acceleration = interval / (duration ** 2)
+    # Constants
+    # ---------
+    # ACCELERATION:  float
+    #     The rate at which speed changes over `duration`.
 
-    return round(acceleration * (time_index ** 2))
+    ACCELERATION = interval / (duration ** 2)
+
+    return round(ACCELERATION * (time_index ** 2))
 
 # ----------------------------------------------------------------------
 
@@ -152,7 +175,7 @@ def ease_in_position(interval:  int, duration:  float,
     See `PositionFunction` for information on parameters and return
     values.
 
-    Notes
+     Notes
     -----
     Deceleration is merely the reverse of acceleration.
     """
@@ -182,12 +205,19 @@ def easy_ease_position(interval:  int, duration:  float,
     assert duration > 0.0
     assert (time_index >= 0.0) and (time_index <= duration)
 
-    half_interval = interval // 2
-    half_duration = duration / 2.0
+    # Constants
+    # ---------
+    # HALF_INTERVAL:  int
+    #     Half of `interval`, rounded down to the nearest integer.
+    # HALF_DURATION:  float
+    #     Half of `duration`.
 
-    if time_index <= half_duration:
-        return ease_out_position(half_interval, half_duration, time_index)
+    HALF_INTERVAL = interval // 2
+    HALF_DURATION = duration / 2.0
+
+    if time_index <= HALF_DURATION:
+        return ease_out_position(HALF_INTERVAL, HALF_DURATION, time_index)
     else:
-        return ease_in_position(interval - half_interval, half_duration,
-                                time_index - half_duration) \
-               + half_interval
+        return ease_in_position(interval - HALF_INTERVAL, HALF_DURATION,
+                                time_index - HALF_DURATION) \
+               + HALF_INTERVAL
