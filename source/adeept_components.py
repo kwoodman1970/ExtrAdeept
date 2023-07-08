@@ -50,14 +50,18 @@ def _validate_gpio_pin_number(pin_number:  int, parameter_name:  str) -> None:
     # parameter_name:  str
     #     The name of the caller's parameter that `pin_number` came
     #     from.  If an exception is raised then this will be included in
-    #     its error message.
+    #     the error message.
     #
     # Raises
     # ------
     # ValueError
     #     `pin_number` isn't a valid GPIO BCM pin number.
 
-    # Valid GPIO BCM pin numbers are all within a specific range.
+    # Adeept HAT's connect to a 40-pin GPIO, which means that (as of
+    # this writing) Raspberry Pi models 2, 3 & 4 are supported.  Valid
+    # GPIO BCM pin numbers are within the same range for all of these
+    # models.  See `Raspberry Pi Pinout <https://pinout.xyz>` for
+    # details.
     #
     # Constants
     # ---------
@@ -66,7 +70,7 @@ def _validate_gpio_pin_number(pin_number:  int, parameter_name:  str) -> None:
     # GPIO_MAX_PIN:  int
     #     The maximum valid GPIO BCM pin number.
 
-    GPIO_MIN_PIN: int = 0
+    GPIO_MIN_PIN: int = 2
     GPIO_MAX_PIN: int = 27
 
     if (pin_number < GPIO_MIN_PIN) or (pin_number > GPIO_MAX_PIN):
@@ -84,57 +88,67 @@ class DriveMotor:
     Connect the drive motor to either the "Motor A" or "Motor B" port on
     the Adeept HAT.
 
+    Notes
+    -----
     An L298N controller has two sets of H-bridge connections.  Each
     H-bridge has an ENABLE connection, two INPUT connections and two
     OUTPUT connections.  If ENABLE is high then power is sent to the
-    OUTPUT connections according to the INPUT signals.  With a DC motor
-    connected, the INPUT signals have the following effect:
+    OUTPUT connections according to the INPUT signals.  The INPUT
+    signals have the following effect on a DC motor::
 
-               |INPUT 2|INPUT 2|
-               |is low |is high|
-        -------+-------+-------+
-        INPUT 1|Fast   |Revese |  "Forward" and "Reverse" are arbitrary
-        is low |brake  |       |  directions here
-        -------+-------+-------|
-        INPUT 1|Forward|Fast   |
-        is high|       |brake  |
-        -------+-------+-------+
+        +-------+-------+----------+
+        |INPUT 1|INPUT 2|Effect    |
+        +=======+=======+==========+
+        |Low            |Fast brake|
+        +-------+-------+----------+
+        |Low    |High   |Revese    |
+        +-------+-------+----------+
+        |High   |Low    |Forward   |
+        +-------+-------+----------+
+        |High           |Fast brake|
+        +---------------+----------+
+
+    "Forward" and "Reverse" are arbitrary directions here
 
     If ENABLE is low then the motor will receive no power and it will
-    free-wheel.
+    free-wheel.  Furthermore, PWM can be used on the ENABLE connection
+    to control the speed of the motor.
 
-    PWM can be used on the ENABLE connection to control the speed of the
-    motor.
+    On an Adeept HAT, the L298N controller's ENABLE and INPUT
+    connections are connected to GPIO pins and the OUTPUT connections
+    are connected to the "Motor A" and "Motor B" ports.
 
-    On an Adeept HAT, the ENABLE and INPUT connections are connected to
-    GPIO pins and the OUTPUT connections are connected to the "Motor A"
-    and "Motor B" ports.
+    Parameters
+    ----------
+    enable_pin:  int
+        The GPIO pin (output) that connects to the L298N controller's
+        ENABLE connection.
 
-    METHODS
-    =======
+    input_pin_1:  int
+    input_pin_2:  int
+        The GPIO pins (output) that connect to the L298N controller's
+        INPUT connections.  If the motor rotates opposite to the desired
+        direction then swap these two arguments.
 
-    __init__() -> None:
-        Prepare a drive motor for use.
+    scale_factor:  float
+        An adjustment for when one drive motor is slightly faster than
+        another and needs to be slowed down (for example, to keep a
+        vehicle moving in a straight line).  It must be greater 0.0 and
+        no greater than 1.0.
 
-    speed() -> Union[int, None]:
-        Get the speed of the drive motor.
-
-    set_speed() -> None:
-        Set the speed of the drive motor.
-
-    stop() -> None:
-        Turn off the power to the drive motor and let it freewheel.
+    Raises
+    ------
+    ValueError
+        One or more arguments are invalid.
     """
 
-    # CLASS PRIVATE PROPERTIES
-    # =========================
-    #
+    # Class Private Properties
+    # ------------------------
     # _PWM_FREQUENCY:  int
     #     The PWM frequency to use with the drive motor.
     #
-    # PRIVATE PROPERTIES
-    # ==================
-    #
+    # Private Properties
+    # ------------------
     # _ENABLE_PIN:  int
     #     The GPIO pin (output) that connects to the L298N controller's
     #     ENABLE connection.
@@ -155,46 +169,17 @@ class DriveMotor:
     #
     # _speed:  int, None
     #     The drive motor's current speed (-100 to 100).  A value of 0
-    #     means that an electromotive brake has been applied to the
-    #     motor.  A value of "None" means that the motor is
-    #     freewheeling.
+    #     means that the motor is freewheeling.  A value of "None" means
+    #     that an electromotive brake has been applied to the motor.
 
-    # _PWM_FREQUENCY:  int = 1000
-    _PWM_FREQUENCY:  int = 2000
+    # _PWM_FREQUENCY:  int = 2000
+    _PWM_FREQUENCY:  int = 1000
 
     def __init__(self, enable_pin:  int, input_pin_1:  int, input_pin_2:  int,
                  scale_factor:  float = 1.0) -> None:
 
         """
         Prepare an L298N-connected drive motor for use.
-
-        PARAMETERS
-        ==========
-
-        enable_pin:  int
-            The GPIO pin (output) that connects to the L298N
-            controller's ENABLE connection.
-
-        input_pin_1:  int
-        input_pin_2:  int
-            The GPIO pins (output) that connect to the L298N
-            controller's INPUT connections.  If the motor rotates
-            opposite to the desired direction then swap these two
-            arguments.
-
-        All GPIO pins must be from 0 to 27 (BCM numbering).
-
-        scale_factor:  float
-            An adjustment for when one drive motor is slightly faster
-            than another and needs to be slowed down (for example, to
-            keep a vehicle moving in a straight line).  It must be
-            greater 0.0 and no greater than 1.0.
-
-        RAISES
-        ======
-
-        ValueError
-            One or more arguments are invalid.
         """
 
         _validate_gpio_pin_number(enable_pin, "enable_pin")
@@ -207,33 +192,36 @@ class DriveMotor:
 
         # Declare private properties.
 
-        self._ENABLE_PIN:  int     = enable_pin
-        self._INPUT_PIN_1:  int    = input_pin_1
-        self._INPUT_PIN_2:  int    = input_pin_2
+        self._ENABLE_PIN:    int   = enable_pin
+        self._INPUT_PIN_1:   int   = input_pin_1
+        self._INPUT_PIN_2:   int   = input_pin_2
         self._SCALE_FACTOR:  float = scale_factor
 
         GPIO.setup(self._ENABLE_PIN,  GPIO.OUT, initial = GPIO.LOW)
-        GPIO.setup(self._INPUT_PIN_1, GPIO.OUT, initial = GPIO.LOW)
+        GPIO.setup(self._INPUT_PIN_1, GPIO.OUT, initial = GPIO.HIGH)
         GPIO.setup(self._INPUT_PIN_2, GPIO.OUT, initial = GPIO.LOW)
 
-        try:
-            self._CONTROLLER = GPIO.PWM(self._ENABLE_PIN, self._PWM_FREQUENCY)
-        except:
-            pass
+        # try:
+        #     self._CONTROLLER = GPIO.PWM(self._ENABLE_PIN, self._PWM_FREQUENCY)
+        # except:
+        #     pass
 
-        self._CONTROLLER.start(0)
+        self._CONTROLLER = GPIO.PWM(self._ENABLE_PIN, self._PWM_FREQUENCY)
+        self._speed      = None
 
-        self._speed = None
+        self.set_speed(0)
 
-# ---------------------------------------------------------------------
+    # ------------------------------------------------------------------
 
+    @property
     def speed(self) -> Union[int, None]:
         """
         Get the speed of the drive motor.
         """
 
         return self._speed
-# ---------------------------------------------------------------------
+
+    # ------------------------------------------------------------------
 
     def set_speed(self, speed:  int) -> None:
         """
@@ -243,50 +231,47 @@ class DriveMotor:
         ==========
 
         speed:  int
-            The new speed for the drive motor (must be from -100 to
-            100).  Negative values will cause the motor to rotate in
-            reverse.  A value of 0 will apply an electromotive brake to
-            the motor.
+            The new speed for the drive motor (must be from -100 to 100).
+            Negative values will cause the motor to rotate in reverse.  A value
+            of 0 will turn off the power to the drive motor and let it
+            freewheel.
 
         RAISES
         ======
 
         ValueError
-            "speed" is given an invalid value.
+            "speed" is an invalid value.
         """
 
         if (speed < -100) or (speed > 100):
             raise ValueError(f"\"speed\" ({speed}) must be from -100 to 100.")
 
-        if speed == 0:
+        # Duty cycle must always be a positive integer -- therefore,
+        # direction of rotation is determined by which INPUT pin is HIGH
+        # and which one is LOW.
+
+        if speed >= 0:
             GPIO.output(self._INPUT_PIN_1, GPIO.HIGH)
+            GPIO.output(self._INPUT_PIN_2, GPIO.LOW)
+        else:
+            GPIO.output(self._INPUT_PIN_1, GPIO.LOW)
             GPIO.output(self._INPUT_PIN_2, GPIO.HIGH)
 
-            new_duty_cycle = 100
-        else:
-            # Duty cycle must always be a positive integer -- therefore,
-            # direction of rotation is determined by which INPUT pin is
-            # HIGH and which one is LOW.
+        new_duty_cycle = round(abs(speed * self._SCALE_FACTOR))
 
-            if speed > 0:
-                GPIO.output(self._INPUT_PIN_1, GPIO.HIGH)
-                GPIO.output(self._INPUT_PIN_2, GPIO.LOW)
-            else:
-                GPIO.output(self._INPUT_PIN_1, GPIO.LOW)
-                GPIO.output(self._INPUT_PIN_2, GPIO.HIGH)
-
-            new_duty_cycle = round(abs(speed * self._SCALE_FACTOR))
-
+        self._CONTROLLER.start(100)
         self._CONTROLLER.ChangeDutyCycle(new_duty_cycle)
 
         self._speed = speed
 
-# ---------------------------------------------------------------------
+    # ------------------------------------------------------------------
 
-    def stop(self) -> None:
+    def brake(self) -> None:
         """
-        Turn off the power to the drive motor and let it freewheel.
+        Apply an electromotive brake to the motor.
         """
+
+        self._CONTROLLER.stop()
 
         GPIO.output(self._INPUT_PIN_1, GPIO.LOW)
         GPIO.output(self._INPUT_PIN_2, GPIO.LOW)
@@ -336,16 +321,13 @@ class UltrasonicSensor:
         Detect the distance to an object.
     """
 
-    # CLASS PRIVATE PROPERTIES
-    # ========================
-    #
-    # _TRIGGER_INTERVAL:  float
+    # Class Private Properties
+    # ------------------------    #
     #     The minium interval between pings.
     #
     # _TRIGGER_DURATION:  float
-    #     How long keep the TRIGGER pin high when initiating an
-    #     ultrasonic ping.
-    #
+    # Private Properties
+    # ------------------    #
     # _ECHO_TIMEOUT:  float
     #     How long to wait for an echo before giving up.
     #
@@ -370,7 +352,7 @@ class UltrasonicSensor:
     _ECHO_TIMEOUT:      float =   0.037
     _SPEED_OF_SOUND:    float = 343.42
 
-# ---------------------------------------------------------------------
+    # ------------------------------------------------------------------
 
     def __init__(self, trigger_pin:  int, echo_pin:  int) -> None:
         """
@@ -407,7 +389,7 @@ class UltrasonicSensor:
         GPIO.setup(self._TRIGGER_PIN,  GPIO.OUT, initial = GPIO.LOW)
         GPIO.setup(self._ECHO_PIN, GPIO.IN)
 
-# ---------------------------------------------------------------------
+    # ------------------------------------------------------------------
 
     def get_distance(self) -> Union[float, None]:
         """
@@ -456,7 +438,7 @@ class UltrasonicSensor:
         else:
             return None
 
-# ---------------------------------------------------------------------
+    # ------------------------------------------------------------------
 
     def get_distance2(self) -> Union[float, None]:
         """
@@ -542,16 +524,13 @@ class NeoPixelStrip(Adafruit_NeoPixel):
         counterpart.
     """
 
-    # CLASS PRIVATE PROPERTIES
-    # ========================
-    #
-    # _DMA_CHANNEL:  int
+    # Class Private Properties
+    # ------------------------    #
     #     DMA channel to use (DMA is why root privileges are required).
     #
     # _FREQUENCY:  int
-    #     Data stream frequency in Hz.
-    #
-    # _PWM_CHANNEL:  int
+    # Private Properties
+    # ------------------    #
     #     PWM channnel on the data pin to use.
     #
     # _BRIGHTNESS:  int
@@ -566,7 +545,7 @@ class NeoPixelStrip(Adafruit_NeoPixel):
     _BRIGHTNESS:   int  = 255
     _INVERT:       bool = False
 
-# ---------------------------------------------------------------------
+    # ------------------------------------------------------------------
 
     def __init__(self, data_pin:  int, num_pixels:  int) -> None:
         """
@@ -608,7 +587,7 @@ class NeoPixelStrip(Adafruit_NeoPixel):
         self.begin()
         atexit.register(self._neo_pixel_strip_atexit)
 
-# ---------------------------------------------------------------------
+    # ------------------------------------------------------------------
 
     def fill(self, color:  Union[int, List[int]],
              pixels:  Optional[List[int]] = None) -> None:
@@ -685,7 +664,7 @@ class NeoPixelStrip(Adafruit_NeoPixel):
             for i in pixels2:
                 self.setPixelColor(i, color)
 
-# ---------------------------------------------------------------------
+    # ------------------------------------------------------------------
 
     def clear(self):
         """
@@ -696,7 +675,7 @@ class NeoPixelStrip(Adafruit_NeoPixel):
 
         self.fill(0x000000)
 
-# ---------------------------------------------------------------------
+    # ------------------------------------------------------------------
 
     def _neo_pixel_strip_atexit(self) -> None:
         # Darken all NeoPixels when program terminates.
@@ -845,7 +824,7 @@ class LineTracker():
 
         self._callbacks:  List[Callable[[bool, bool, bool], None]] = []
 
-# ---------------------------------------------------------------------
+    # ------------------------------------------------------------------
 
     def line_is_white(self) -> None:
         """
@@ -854,7 +833,7 @@ class LineTracker():
 
         self._detection_state = GPIO.LOW
 
-# ---------------------------------------------------------------------
+    # ------------------------------------------------------------------
 
     def line_is_black(self) -> None:
         """
@@ -863,7 +842,7 @@ class LineTracker():
 
         self._detection_state = GPIO.HIGH
 
-# ---------------------------------------------------------------------
+    # ------------------------------------------------------------------
 
     @property
     def left(self) -> bool:
@@ -878,7 +857,7 @@ class LineTracker():
 
         return self._PIN_LEFT.state == self._detection_state
 
-# ---------------------------------------------------------------------
+    # ------------------------------------------------------------------
 
     @property
     def middle(self) -> bool:
@@ -893,7 +872,7 @@ class LineTracker():
 
         return self._PIN_MIDDLE.state == self._detection_state
 
-# ---------------------------------------------------------------------
+    # ------------------------------------------------------------------
 
     @property
     def right(self) -> bool:
@@ -908,7 +887,7 @@ class LineTracker():
 
         return self._PIN_RIGHT.state == self._detection_state
 
-# ---------------------------------------------------------------------
+    # ------------------------------------------------------------------
 
     def add_callback(self,
                      callback:  Callable[[bool, bool, bool], None]) -> None:
@@ -938,7 +917,7 @@ class LineTracker():
         if callback not in self._callbacks:
             self._callbacks.append(callback)
 
-# ---------------------------------------------------------------------
+    # ------------------------------------------------------------------
 
     def remove_callback(self,
                         callback:  Callable[[bool, bool, bool], None]) -> None:
@@ -962,7 +941,7 @@ class LineTracker():
         if callback in self._callbacks:
             self._callbacks.remove(callback)
 
-# ---------------------------------------------------------------------
+    # ------------------------------------------------------------------
 
     def _on_change(self) -> None:
         for listener in self._callbacks:
@@ -1018,7 +997,7 @@ class BuzzerActive:
 
         GPIO.setup(self._pin, GPIO.OUT, initial = self._off)
 
-# ---------------------------------------------------------------------
+    # ------------------------------------------------------------------
 
     def start(self) -> None:
         """
@@ -1027,7 +1006,7 @@ class BuzzerActive:
 
         GPIO.output(self._pin, self._on)
 
-# ---------------------------------------------------------------------
+    # ------------------------------------------------------------------
 
     def stop(self) -> None:
         """
@@ -1075,7 +1054,7 @@ class BuzzerPassive:
 
         self._CONTROLLER = GPIO.PWM(self._pin, 0)
 
-# ---------------------------------------------------------------------
+    # ------------------------------------------------------------------
 
     def setFrequency(self, frequency:  int) -> None:
         """
@@ -1114,7 +1093,7 @@ class BuzzerPassive:
 
         self._PWMFrequency = frequency
 
-# ---------------------------------------------------------------------
+    # ------------------------------------------------------------------
 
     def stop(self) -> None:
         """
@@ -1165,7 +1144,7 @@ class RGB_LED:
         self._PWMGreen.start(0)
         self._PWMBlue.start(0)
 
-# ---------------------------------------------------------------------
+    # ------------------------------------------------------------------
 
     def setColor(self, color):
     # This method sets the color of the RGB LED.
@@ -1186,7 +1165,7 @@ class RGB_LED:
         self._PWMGreen.ChangeDutyCycle((greenValue * 100) / 255)
         self._PWMBlue.ChangeDutyCycle((blueValue * 100) / 255)
 
-# ---------------------------------------------------------------------
+    # ------------------------------------------------------------------
 
     def off(self):
     # This method turns off the RGB LED.
@@ -1220,14 +1199,14 @@ class Port():
 
         GPIO.setup(self._controlPin, GPIO.OUT, initial = GPIO.LOW)
 
-# ---------------------------------------------------------------------
+    # ------------------------------------------------------------------
 
     def on(self):
     # This method turns the LED lamp on.
 
         GPIO.output(self._controlPin, GPIO.HIGH)
 
-# ---------------------------------------------------------------------
+    # ------------------------------------------------------------------
 
     def off(self):
     # This method turns the LED lamp off.
