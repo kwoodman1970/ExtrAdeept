@@ -17,7 +17,7 @@ then add the following line to the top of your module in order to use
 
     from adeept_position_functions import PositionFunction
 
-If you want to create your own position function the be sure that its
+If you want to create your own position function then be sure that its
 definition complies with `PositionFunction`.
 
 Routine Listings
@@ -49,15 +49,15 @@ Move the servo on port 0 at a constant speed:
 >>> my_servo.wait()
 
 Move the servo on port 0 with a custom position function (which uses the
-rising part of a cosine wave):
+rising half of a sine wave):
 
 >>> import math
 >>> from adeept_components_servo import Servo
->>> def cospos(range:  int, duration:  float, time_index: float) -> int:
+>>> def cos_pos(range:  int, duration:  float, time_index: float) -> int:
 ...     angle = (1.0 + time_index / duration) * pi
 ...     return round((math.cos(angle) / 2.0 + 0.5) * range)
 >>> my_servo = Servo(0)
->>> my_servo.moveBy(cospos, 1.0, angle:  180.0)
+>>> my_servo.moveBy(cos_pos, 1.0, angle:  180.0)
 >>> my_servo.wait()
 """
 
@@ -116,6 +116,7 @@ def linear_position(interval:  int, duration:  float, time_index: float) -> int:
     This function uses the following well-known kinetics formulae::
 
         v = d / t
+
         d = v * t
 
     where `d` is distance, `v` is velocity and `t` is time.
@@ -148,6 +149,7 @@ def ease_out_position(interval:  int, duration:  float,
     This function uses the following well-known kinetics formulae::
 
         a = d / t^2
+
         d = a * t^2
 
     where `d` is distance, `a` is acceleration and `t` is time.

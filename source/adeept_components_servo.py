@@ -41,14 +41,10 @@ class Servo:
     Connect the servo motor to one of the 16 tricolor ports on the
     Adeept HAT.
 
-    Three styles of movement are implemented:  instantaneous, constant
-    velocity (looks stiff and mechanical), and constant acceleration/
-    deceleration (looks smooth and natural).
-
-    NOTE:  if an optional arguement for the constructor isn't provided
-    then the default value for the Adeept Micro Servo AD002 will be
-    used.  If you're using a different servo then consult its
-    documentation for the correct arguments.
+    If an optional parameter for the constructor isn't provided then its
+    default value for the Adeept Micro Servo AD002 will be used.  If a
+    different servo is being used then consult its documentation for the
+    correct parameters.
 
     Parameters
     ----------
@@ -66,26 +62,25 @@ class Servo:
 
     Other Parameters
     ----------------
-    frequency:  int, default `class._DEFAULT_FREQUENCY`
+    frequency:  int
         The servo's PWM frequency (refer to the servo's specifications).
-    pwm_offset:  int, default 0
+    pwm_offset:  int
         An adjustment for PWM values sent to the servo.
-    min_pwm:  int, default `class._DEFAULT_MIN_PWM`
+    min_pwm:  int
         The minumum PWM that can be sent to the servo (refer to the
         servo's specifications, but can be higher to limit the servo's
         range of motion).  Must be less than `max_pwm` (see below).
-    max_pwm:  int, default `class._DEFAULT_MAX_PWM`
+    max_pwm:  int
         The maximum PWM that can be sent to the servo (refer to the
         servo's specifications, but can be lower to limit the servo's
         range of motion).  Must be greater than `min_pwm` (see above).
-    angle_range:  float, default 180.0
+    angle_range:  float
         The number of degrees that the servo rotates between `min_pwm`
-        and `max_pwm`.  Must be greater than 0.0.
+        and `max_pwm`.  Must be greater than 0.0 (default is 180.0).
     initial_pwm:  int
         The initial PWM to send to the servo (such as a starting
-        position or a home position).  The default value is
-        (`class._DEFAULT_MIN_PWM` + `class._DEFAULT_MAX_PWM`) // 2).
-        Must be between `min_pwm` and `max_pwm` (see above).
+        position or a home position).  Must be between `min_pwm` and
+        `max_pwm` (see above).
 
     Raises
     ------
@@ -243,9 +238,35 @@ class Servo:
 
     # ------------------------------------------------------------------
 
-    def move_by(self, timing_function:  PositionFunction, stop_time:  float,
+    def move_by(self, position_function:  PositionFunction, stop_time:  float,
                 pwm:  Optional[int] = None,
                 angle:  Optional[float] = None) -> None:
+        """
+        Move the servo to a new position by using a position function.
+
+        This method operates asynchronously and returns immediately
+        while a separate thread controls the servo.
+
+        Either `pwm` or `angle` must be provided, but not both.
+
+        Parameters
+        ----------
+        position_function:  PositionFunction
+            The position function that governs the servo's movement.
+        pwm:  int, optional
+            The new PWM value to set the servo to.  If provided, it
+            must be between `self.MIN_PWM` and `self.MAX_PWM`.
+        angle:  float, optional
+            The new angle to set the servo to.  If provided, it
+            must be between 0 and `self.ANGLE_RANGE`.
+        stop_time:  float, optional
+            The time at which the servo is to stop moving.
+
+        Raises
+        ------
+        ValueError
+            One or more arguments are invalid.
+        """
 
         new_pwm = self._validated_pwm(pwm, angle)
 
@@ -254,7 +275,7 @@ class Servo:
 
         self._stop_moving = False
         self._thread = threading.Thread(target = self._move_by,
-                                        args = (timing_function, new_pwm,
+                                        args = (position_function, new_pwm,
                                                 stop_time))
 
         self._thread.start()
@@ -394,7 +415,7 @@ class Servo:
         """
         Move the servo to a new position at a fixed acceleration.
 
-        DEPRECATED -- use move_by(ease_in_out_timing, ...) instead.
+        DEPRECATED -- use move_by(easy_ease_position, ...) instead.
 
         The servo will move in a smooth, natural-looking manner.
 
@@ -455,7 +476,9 @@ class Servo:
         as:
 
             d = a * t^2 / 4
+
             a = d * 4 / t^2
+
             t = sqrt(d / a) * 2
 
         where `d` is (total) distance, `a` is acceleration and `t` is
@@ -760,39 +783,39 @@ class Servo:
 
         # Move the servo according to a timing function.
         #
-        # This method is intended to be a thread body.
+        # This method is to be used as a thread body.
         #
         # Parameters
         # ----------
-        #
         # new_pwm:  int
         #     The final PWM value to set the servo to.  It must be
         #     between "self.MIN_PWM" and "self.MAX_PWM".
-        #
         # stop_time:  float
         #     The time at which to stop moving the servo.  If it's in
         #     the past then movement is instantaneous.
+
+        # Constants
+        # ---------
+        # START_TIME:  float
+        #     The time at which movement begins.
+        # DURATION:  float
+        #     The total time needed to complete the movement.
+        # START_PWM:  int
+        #     The movement's initial PWM.
+        # PWM_RANGE:  int
+        #     The total range that the servo is to rotate (can be
+        #     negative).
         #
         # Variables
         # ---------
-        #
-        # num_secs:  float
-        #     The total time needed to complete the movement.
-        #
-        # speed:  float
-        #     How fast the servo should rotate during the movement (in
-        #     PWM's/second)
-        #
-        # start_pwm:  int
-        #     The movement's initial PWM.
-        #
-        # current_secs:  float:
+        # time_index:  float:
         #     The current time in the movement.
 
-        duration:  float   = stop_time - time.time()
-        start_pwm:  int    = self._current_pwm
-        pwm_range:  int    = new_pwm - start_pwm
-        start_time:  float = time.time()
+        START_TIME:  float = time.time()
+        DURATION:  float   = stop_time - START_TIME
+        START_PWM:  int    = self._current_pwm
+        PWM_RANGE:  int    = new_pwm - START_PWM
+
         time_index:  float = self._MOVE_INTERVAL
 
         # This is the main loop.  During each iteration, the servo's
@@ -802,10 +825,10 @@ class Servo:
         # The loop exits when "end_time" is reached or when
         # "stop_moving" is set.
 
-        while not self._stop_moving and (time_index < duration):
-            self._current_pwm = timing_function(pwm_range, duration,
-                                                        time_index) \
-                                + start_pwm
+        while not self._stop_moving and (time_index < DURATION):
+            self._current_pwm = timing_function(PWM_RANGE, DURATION,
+                                                time_index) \
+                                + START_PWM
             self._current_pwm = min(max(self._current_pwm, self.MIN_PWM),
                                     self.MAX_PWM)
 
@@ -813,7 +836,7 @@ class Servo:
                 self._CONTROLLER.set_pwm(self._PORT_NUM, self._PWM_OFFSET,
                                          self._current_pwm)
 
-            time.sleep(max(0, start_time + time_index - time.time()))
+            time.sleep(max(0, START_TIME + time_index - time.time()))
 
             time_index += self._MOVE_INTERVAL
 
@@ -822,4 +845,3 @@ class Servo:
         with _SERVOS_LOCK:
             self._CONTROLLER.set_pwm(self._PORT_NUM, self._PWM_OFFSET,
                                      self._current_pwm)
-

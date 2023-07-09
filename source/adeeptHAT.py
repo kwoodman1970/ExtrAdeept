@@ -102,7 +102,7 @@ def _endHAT():
         print("_endHAT() silenced the buzzer.")
 
         for driveMotor in _driveMotors:
-            driveMotor.stop()
+            driveMotor.set_speed(0)
 
         print("_endHAT() stopped all drive motors.")
 

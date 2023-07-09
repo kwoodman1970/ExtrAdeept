@@ -83,10 +83,30 @@ def _validate_gpio_pin_number(pin_number:  int, parameter_name:  str) -> None:
 
 class DriveMotor:
     """
-    Control a drive motor that's connected to an L298N controller.
+    Control a DC drive motor that's connected to an L298N controller.
 
     Connect the drive motor to either the "Motor A" or "Motor B" port on
     the Adeept HAT.
+
+    Parameters
+    ----------
+    enable_pin:  int
+        The GPIO pin (output) that connects to the L298N controller's
+        ENABLE connection.
+    input_pin_1:  int
+    input_pin_2:  int
+        The GPIO pins (output) that connect to the L298N controller's
+        INPUT connections.  If the motor rotates opposite to the desired
+        direction then swap these two arguments.
+    scale_factor:  float
+        An adjustment for when one drive motor is slightly faster than
+        another and needs to be slowed down (for example, to keep a
+        vehicle moving in a straight line).  It must be greater than 0.0
+        and no greater than 1.0 -- the default value is 1.0.
+
+    Attributes
+    ----------
+    speed
 
     Notes
     -----
@@ -97,44 +117,27 @@ class DriveMotor:
     signals have the following effect on a DC motor::
 
         +-------+-------+----------+
-        |INPUT 1|INPUT 2|Effect    |
+        |INPUT 1|INPUT 2|  Effect  |
         +=======+=======+==========+
-        |Low            |Fast brake|
+        |      Low      |Fast brake|
         +-------+-------+----------+
-        |Low    |High   |Revese    |
+        |  Low  | High  |  Revese  |
         +-------+-------+----------+
-        |High   |Low    |Forward   |
+        | High  |  Low  | Forward  |
         +-------+-------+----------+
-        |High           |Fast brake|
+        |     High      |Fast brake|
         +---------------+----------+
 
-    "Forward" and "Reverse" are arbitrary directions here
+    "Forward" and "reverse" are arbitrary directions.
 
     If ENABLE is low then the motor will receive no power and it will
-    free-wheel.  Furthermore, PWM can be used on the ENABLE connection
-    to control the speed of the motor.
+    freewheel.  Furthermore, PWM can be used on the ENABLE connection to
+    control the speed of the motor.
 
     On an Adeept HAT, the L298N controller's ENABLE and INPUT
     connections are connected to GPIO pins and the OUTPUT connections
-    are connected to the "Motor A" and "Motor B" ports.
-
-    Parameters
-    ----------
-    enable_pin:  int
-        The GPIO pin (output) that connects to the L298N controller's
-        ENABLE connection.
-
-    input_pin_1:  int
-    input_pin_2:  int
-        The GPIO pins (output) that connect to the L298N controller's
-        INPUT connections.  If the motor rotates opposite to the desired
-        direction then swap these two arguments.
-
-    scale_factor:  float
-        An adjustment for when one drive motor is slightly faster than
-        another and needs to be slowed down (for example, to keep a
-        vehicle moving in a straight line).  It must be greater 0.0 and
-        no greater than 1.0.
+    are connected (along with a voltage boost from VIN) to the "Motor A"
+    and "Motor B" ports.
 
     Raises
     ------
@@ -179,7 +182,7 @@ class DriveMotor:
                  scale_factor:  float = 1.0) -> None:
 
         """
-        Prepare an L298N-connected drive motor for use.
+        Prepare an L298N-connected DC drive motor for use.
         """
 
         _validate_gpio_pin_number(enable_pin, "enable_pin")
@@ -207,19 +210,9 @@ class DriveMotor:
         #     pass
 
         self._CONTROLLER = GPIO.PWM(self._ENABLE_PIN, self._PWM_FREQUENCY)
-        self._speed      = None
+        self._speed      = 0
 
-        self.set_speed(0)
-
-    # ------------------------------------------------------------------
-
-    @property
-    def speed(self) -> Union[int, None]:
-        """
-        Get the speed of the drive motor.
-        """
-
-        return self._speed
+        self._CONTROLLER.start(self._speed)
 
     # ------------------------------------------------------------------
 
@@ -227,23 +220,21 @@ class DriveMotor:
         """
         Set the speed of the drive motor.
 
-        PARAMETERS
-        ==========
-
+        Parameters
+        ----------
         speed:  int
-            The new speed for the drive motor (must be from -100 to 100).
-            Negative values will cause the motor to rotate in reverse.  A value
-            of 0 will turn off the power to the drive motor and let it
-            freewheel.
+            The new speed for the drive motor (must be from -100 to
+            100).  Negative values will cause the motor to rotate in
+            reverse.  A value of 0 will turn off the power to the drive
+            motor and let it freewheel.
 
-        RAISES
-        ======
-
+        Raises
+        ------
         ValueError
             "speed" is an invalid value.
         """
 
-        if (speed < -100) or (speed > 100):
+        if abs(speed) > 100:
             raise ValueError(f"\"speed\" ({speed}) must be from -100 to 100.")
 
         # Duty cycle must always be a positive integer -- therefore,
@@ -258,11 +249,9 @@ class DriveMotor:
             GPIO.output(self._INPUT_PIN_2, GPIO.HIGH)
 
         new_duty_cycle = round(abs(speed * self._SCALE_FACTOR))
+        self._speed    = speed
 
-        self._CONTROLLER.start(100)
         self._CONTROLLER.ChangeDutyCycle(new_duty_cycle)
-
-        self._speed = speed
 
     # ------------------------------------------------------------------
 
@@ -271,13 +260,26 @@ class DriveMotor:
         Apply an electromotive brake to the motor.
         """
 
-        self._CONTROLLER.stop()
-
         GPIO.output(self._INPUT_PIN_1, GPIO.LOW)
         GPIO.output(self._INPUT_PIN_2, GPIO.LOW)
-        GPIO.output(self._ENABLE_PIN,  GPIO.LOW)
+        self._CONTROLLER.ChangeDutyCycle(100)
 
         self._speed = None
+
+    # ------------------------------------------------------------------
+
+    @property
+    def speed(self) -> Union[int, None]:
+        """
+        Get the speed of the drive motor.
+
+        Returns
+        -------
+            The motor's current speed (-100 to 100), or `None` if an
+            electromotive brake is currently being applied.
+        """
+
+        return self._speed
 
 # ======================================================================
 # HC-SR04 ULTRSONIC SENSOR CLASS DEFINITION
