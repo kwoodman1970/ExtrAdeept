@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 """
-adeeptHAT.py -- objects for controlling Adeept HAT components.
+Adeept HAT objectss.
 
 This module contains objects for controlling the following HATs:
 

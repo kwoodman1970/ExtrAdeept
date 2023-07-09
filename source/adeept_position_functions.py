@@ -1,5 +1,5 @@
 """
-adeept_position_functions.py -- calculate positions based on timing.
+Functions for calculating position based on timing.
 
 A position function calculates a position when given an interval (a.k.a.
 range or distance), a duration and a time index.  These functions are
@@ -9,7 +9,7 @@ To use one or more of the position functions in this module (see the
 **Routine Listings** section), add the following line to the top of your
 module::
 
-    from adeept_position_functions import *list_of_functions*
+    from adeept_position_functions import <list of functions>
 
 If you want to create your own routine that calls a position function
 then add the following line to the top of your module in order to use
@@ -22,12 +22,10 @@ definition complies with `PositionFunction`.
 
 Routine Listings
 ----------------
-`linear_position`
-`ease_out_position`
-`ease_in_position`
-`easy_ease_position`
-    Four pre-built position functions for common motions (see the
-    **Notes** section).
+linear_position
+ease_out_position
+ease_in_position
+easy_ease_position
 
 Notes
 -----

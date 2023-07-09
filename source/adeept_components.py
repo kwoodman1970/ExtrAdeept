@@ -1,5 +1,5 @@
 """
-adeept_components.py -- classes for controlling Adeept HAT components.
+Classes for controlling Adeept HAT components.
 
 This module contains classes for controlling the following components:
 
@@ -83,7 +83,7 @@ def _validate_gpio_pin_number(pin_number:  int, parameter_name:  str) -> None:
 
 class DriveMotor:
     """
-    Control a DC drive motor that's connected to an L298N controller.
+    Control a DC drive motor that's connected to an L298 controller.
 
     Connect the drive motor to either the "Motor A" or "Motor B" port on
     the Adeept HAT.
@@ -91,14 +91,14 @@ class DriveMotor:
     Parameters
     ----------
     enable_pin:  int
-        The GPIO pin (output) that connects to the L298N controller's
+        The GPIO pin (output) that connects to the L298 controller's
         ENABLE connection.
     input_pin_1:  int
     input_pin_2:  int
-        The GPIO pins (output) that connect to the L298N controller's
+        The GPIO pins (output) that connect to the L298 controller's
         INPUT connections.  If the motor rotates opposite to the desired
         direction then swap these two arguments.
-    scale_factor:  float
+    scale_factor:  float (optional)
         An adjustment for when one drive motor is slightly faster than
         another and needs to be slowed down (for example, to keep a
         vehicle moving in a straight line).  It must be greater than 0.0
@@ -110,34 +110,40 @@ class DriveMotor:
 
     Notes
     -----
-    An L298N controller has two sets of H-bridge connections.  Each
-    H-bridge has an ENABLE connection, two INPUT connections and two
-    OUTPUT connections.  If ENABLE is high then power is sent to the
-    OUTPUT connections according to the INPUT signals.  The INPUT
-    signals have the following effect on a DC motor::
+    An L298 controller has a VOLTAGE SUPPLY (Vs) connection (up to 42V,
+    2A) and two sets of H-bridge connections.  Each H-bridge has an
+    ENABLE connection, two INPUT connections and two OUTPUT connections.
+    If ENABLE is high then power from VOLTAGE SUPPLY is sent to the
+    OUTPUT connections according to the INPUT signals with the following
+    effects on the drive motor::
 
-        +-------+-------+----------+
-        |INPUT 1|INPUT 2|  Effect  |
-        +=======+=======+==========+
-        |      Low      |Fast brake|
-        +-------+-------+----------+
-        |  Low  | High  |  Revese  |
-        +-------+-------+----------+
-        | High  |  Low  | Forward  |
-        +-------+-------+----------+
-        |     High      |Fast brake|
-        +---------------+----------+
+    +-------+-------+--------+--------+----------+
+    |INPUT 1|INPUT 2|OUTPUT 1|OUTPUT 2|  Effect  |
+    +=======+=======+========+========+==========+
+    |  Low  |  Low  |   0V   |   0V   |Fast Brake|
+    +-------+-------+--------+--------+----------+
+    | High  |  Low  |   Vs   |   0V   | Forward  |
+    +-------+-------+--------+--------+----------+
+    |  Low  | High  |   0V   |   Vs   | Reverse  |
+    +-------+-------+--------+--------+----------+
+    | High  | High  |   Vs   |   Vs   |Fast Brake|
+    +-------+-------+--------+--------+----------+
 
-    "Forward" and "reverse" are arbitrary directions.
+    "Forward" and "reverse" are arbitrary directions in this table.
 
     If ENABLE is low then the motor will receive no power and it will
     freewheel.  Furthermore, PWM can be used on the ENABLE connection to
     control the speed of the motor.
 
-    On an Adeept HAT, the L298N controller's ENABLE and INPUT
-    connections are connected to GPIO pins and the OUTPUT connections
-    are connected (along with a voltage boost from VIN) to the "Motor A"
-    and "Motor B" ports.
+    See STMicroelectronics' `Dual full-bridge driver
+    <https://www.st.com/resource/en/datasheet/l298.pdf>` (with
+    particular attention to Figure 6) for details.
+
+    On an Adeept HAT, the L298 controller's VOLTAGE SUPPLY is connected
+    either to the HAT's "Vin" port or GPIO power pins, the ENABLE &
+    INPUT connections are connected to GPIO I/O pins and the OUTPUT
+    connections are connected to the HAT's "Motor A" and "Motor B"
+    ports.
 
     Raises
     ------
@@ -153,12 +159,12 @@ class DriveMotor:
     # Private Properties
     # ------------------
     # _ENABLE_PIN:  int
-    #     The GPIO pin (output) that connects to the L298N controller's
+    #     The GPIO pin (output) that connects to the L298 controller's
     #     ENABLE connection.
     #
     # _INPUT_PIN_1:  int
     # _INPUT_PIN_2:  int
-    #     The GPIO pins (output) that connect to the L298N controller's
+    #     The GPIO pins (output) that connect to the L298 controller's
     #     INPUT connections.  If the motor rotates opposite to the
     #     desired direction then swap these two values.
     #
@@ -182,7 +188,7 @@ class DriveMotor:
                  scale_factor:  float = 1.0) -> None:
 
         """
-        Prepare an L298N-connected DC drive motor for use.
+        Prepare an L298-connected DC drive motor for use.
         """
 
         _validate_gpio_pin_number(enable_pin, "enable_pin")
@@ -275,6 +281,7 @@ class DriveMotor:
 
         Returns
         -------
+        Union[int, None]
             The motor's current speed (-100 to 100), or `None` if an
             electromotive brake is currently being applied.
         """

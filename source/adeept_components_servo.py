@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 """
-adeept_components_servo.py -- class for controlling Adeept HAT servos.
+Class for controlling Adeept HAT servos.
 
 To use, add the following line to the top of your module:
 
@@ -259,7 +259,7 @@ class Servo:
         angle:  float, optional
             The new angle to set the servo to.  If provided, it
             must be between 0 and `self.ANGLE_RANGE`.
-        stop_time:  float, optional
+        stop_time:  float
             The time at which the servo is to stop moving.
 
         Raises
