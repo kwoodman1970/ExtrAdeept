@@ -136,7 +136,7 @@ class DriveMotor:
     control the speed of the motor.
 
     See STMicroelectronics' `Dual full-bridge driver
-    <https://www.st.com/resource/en/datasheet/l298.pdf>` (with
+    <https://www.st.com/resource/en/datasheet/l298.pdf>` datasheet (with
     particular attention to Figure 6) for details.
 
     On an Adeept HAT, the L298 controller's VOLTAGE SUPPLY is connected
@@ -186,7 +186,6 @@ class DriveMotor:
 
     def __init__(self, enable_pin:  int, input_pin_1:  int, input_pin_2:  int,
                  scale_factor:  float = 1.0) -> None:
-
         """
         Prepare an L298-connected DC drive motor for use.
         """
@@ -300,6 +299,22 @@ class UltrasonicSensor:
     Do NOT connect it to any other port -- doing so will likely damage
     it!
 
+    Parameters
+    ----------
+    trigger_pin:  int
+        The GPIO pin (output) that connects to the HC-SR04 sensor's
+        TRIGGER connection.
+    echo_pin:  int
+        The GPIO pin (input) that connects to the HC-SR04 sensor's
+        ECHO connection.
+
+    Raises
+    ------
+    ValueError
+        One or more arguments are invalid.
+
+    Notes
+    -----
     An HC-SR04 module has a TRIGGER connection and an ECHO connection.
     When TRIGGER is high for at least 10us, the module will emit eight
     40Khz ultrasonic pulses, then set ECHO high.  It will then set ECHO
@@ -312,48 +327,39 @@ class UltrasonicSensor:
     calculated by multiplying the total time that ECHO was high by the
     speed of sound, then dividing by two.
 
-    IMPORTANT NOTE ABOUT ACCURACY
-    =============================
+    See `HC-SR04 datasheet
+    <https://cdn.sparkfun.com/datasheets/Sensors/Proximity/HCSR04.pdf>
+    (one of many sources) for details.
+
+    IMPORTANT NOTE ABOUT ACCURACY:
 
     It isn't always possible to make accurate measurements due to the
     way that Python and Linux can interrupt a program to deal with other
     processess.  This can be mitigated by taking multiple readings and
     using smoothing algorithms.
-
-    METHODS
-    =======
-
-    __init__() -> None:
-        Prepare an HC_SR04-connected ultrasonic distance sensor for use.
-
-    get_distance() -> Union[float, None]:
-        Detect the distance to an object.
     """
 
     # Class Private Properties
-    # ------------------------    #
-    #     The minium interval between pings.
+    # ------------------------
+    # _TRIGGER_INTERVAL
+    #     The minium interval between calls to `get_distance()`.
     #
     # _TRIGGER_DURATION:  float
     # Private Properties
     # ------------------    #
     # _ECHO_TIMEOUT:  float
     #     How long to wait for an echo before giving up.
-    #
     # _SPEED_OF_SOUND:  float
     #     The speed of sound in metres per second at 20°C.
     #
-    # PRIVATE PROPERTIES
-    # ==================
-    #
+    # Private Properties
+    # ------------------
     # _TRIGGER_PIN:  int
     #     The GPIO pin (output) that's connected to TRIGGER.
-    #
     # _ECHO_PIN:  int
     #     The GPIO pin (input) that's connected to ECHO.
-    #
     # _last_trigger_time:  float
-    #     The last time at which the entire sequence started to be
+    #     The time at which the last entire cycle started to be
     #     triggered.
 
     _TRIGGER_INTERVAL:  float =   0.065
@@ -365,26 +371,7 @@ class UltrasonicSensor:
 
     def __init__(self, trigger_pin:  int, echo_pin:  int) -> None:
         """
-        Prepare an HC_SR04-connected ultrasonic distance sensor for use.
-
-        PARAMETERS
-        ==========
-
-        trigger_pin:  int
-            The GPIO pin (output) that connects to the HC-SR04 sensor's
-            TRIGGER connection.
-
-        echo_pin:  int
-            The GPIO pin (input) that connects to the HC-SR04 sensor's
-            ECHO connection.
-
-        All GPIO pins must be from 0 to 27 (BCM numbering).
-
-        RAISES
-        ======
-
-        ValueError
-            One or more arguments are invalid.
+        Prepare an HC_SR04 ultrasonic distance sensor for use.
         """
 
         _validate_gpio_pin_number(trigger_pin, "trigger_pin")
@@ -404,16 +391,14 @@ class UltrasonicSensor:
         """
         Detect the distance to an object.
 
-        RETURNS
-        =======
-
-        The distance detected by the component in meters/second
-        (residents of the United States of America, Liberia and Myanmar
-        can convert this to feet/second by multiplying this value by
-        3.28084 feet/meter).
-
-        If no distance was detected (i.e. the component timed-out) then
-        "None" is returned.
+        Returns
+        -------
+        Union[float, None]
+            The distance detected by the component in meters/second
+            (residents of the United States of America, Liberia and
+            Myanmar can convert this to feet/second by multiplying this
+            value by 3.28084 feet/meter).  If no distance was detected
+            (i.e.  the component timed-out) then `None` is returned.
         """
 
         # First, make sure that enough time has pased since the last
@@ -453,16 +438,14 @@ class UltrasonicSensor:
         """
         Detect the distance to an object.
 
-        RETURNS
-        =======
-
-        The distance detected by the component in meters/second
-        (residents of the United States of America, Liberia and Myanmar
-        can convert this to feet/second by multiplying this value by
-        3.28084 feet/meter).
-
-        If no distance was detected (i.e. the component timed-out) then
-        "None" is returned.
+        Returns
+        -------
+        Union[float, None]
+            The distance detected by the component in meters/second
+            (residents of the United States of America, Liberia and
+            Myanmar can convert this to feet/second by multiplying this
+            value by 3.28084 feet/meter).  If no distance was detected
+            (i.e.  the component timed-out) then `None` is returned.
         """
 
         # First, make sure that enough time has pased since the last
