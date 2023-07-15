@@ -30,6 +30,7 @@ DriveMotor
 # ======================================================================
 
 import atexit
+from threading import Event
 import time
 from typing import Callable, List, Union, Optional
 
@@ -363,7 +364,7 @@ class UltrasonicSensor:
     #     triggered.
 
     _TRIGGER_INTERVAL:  float =   0.065
-    _TRIGGER_DURATION:  float =   0.000011
+    _TRIGGER_DURATION:  float =   0.00001
     _ECHO_TIMEOUT:      float =   0.037
     _SPEED_OF_SOUND:    float = 343.42
 
@@ -377,10 +378,10 @@ class UltrasonicSensor:
         _validate_gpio_pin_number(trigger_pin, "trigger_pin")
         _validate_gpio_pin_number(echo_pin, "echo_pin")
 
-        self._TRIGGER_PIN = trigger_pin
-        self._ECHO_PIN    = echo_pin
+        self._TRIGGER_PIN:  int = trigger_pin
+        self._ECHO_PIN:     int = echo_pin
 
-        self._last_trigger_time = 0.0
+        self._last_trigger_time: float = 0.0
 
         GPIO.setup(self._TRIGGER_PIN,  GPIO.OUT, initial = GPIO.LOW)
         GPIO.setup(self._ECHO_PIN, GPIO.IN)
@@ -401,52 +402,21 @@ class UltrasonicSensor:
             (i.e.  the component timed-out) then `None` is returned.
         """
 
-        # First, make sure that enough time has pased since the last
-        # time the sensor was triggered.
+        start_time:  float = 0.0
+        end_time:    float = 0.0
+        blocker:     Event = Event()
 
-        time.sleep(max(0.0, self._last_trigger_time + self._TRIGGER_INTERVAL
-                       - time.time()))
+        def on_edge(pin:  int):
+            nonlocal start_time
+            nonlocal end_time
+            nonlocal blocker
 
-        self._last_trigger_time = time.time()
+            if start_time == 0.0:
+                start_time = time.time()
+            elif end_time == 0.0:
+                end_time = time.time()
 
-        GPIO.output(self._TRIGGER_PIN,GPIO.HIGH)
-        time.sleep(self._TRIGGER_DURATION)
-        GPIO.output(self._TRIGGER_PIN, GPIO.LOW)
-
-        # The time from when the response pin goes high to when it goes
-        # low is the delay betwen transmitting and receiving the
-        # ultrasonic signals.
-
-        while GPIO.input(self._ECHO_PIN) == GPIO.LOW:
-            pass
-
-        start_time = time.time()
-
-        while GPIO.input(self._ECHO_PIN) == GPIO.HIGH:
-            pass
-
-        total_time = time.time() - start_time
-
-        if total_time < self._ECHO_TIMEOUT:
-            return total_time * self._SPEED_OF_SOUND / 2.0
-        else:
-            return None
-
-    # ------------------------------------------------------------------
-
-    def get_distance2(self) -> Union[float, None]:
-        """
-        Detect the distance to an object.
-
-        Returns
-        -------
-        Union[float, None]
-            The distance detected by the component in meters/second
-            (residents of the United States of America, Liberia and
-            Myanmar can convert this to feet/second by multiplying this
-            value by 3.28084 feet/meter).  If no distance was detected
-            (i.e.  the component timed-out) then `None` is returned.
-        """
+                blocker.set()
 
         # First, make sure that enough time has pased since the last
         # time the sensor was triggered.
@@ -456,27 +426,36 @@ class UltrasonicSensor:
 
         self._last_trigger_time = time.time()
 
+        # This method uses the GPIO event detection callback mechanism
+        # to track edge events on the ECHO pin.  Only one type of edge
+        # event (rising, falling or both) can be tracked on any given
+        # GPIO pin at a time -- therefore, a single callback function
+        # must be used.
+        #
+        # Since it's possible for edge events to be missed, timeouts on
+        # blocking operations must be used.
+
+        GPIO.add_event_detect(self._ECHO_PIN, GPIO.BOTH, callback = on_edge)
+
         GPIO.output(self._TRIGGER_PIN,GPIO.HIGH)
         time.sleep(self._TRIGGER_DURATION)
         GPIO.output(self._TRIGGER_PIN, GPIO.LOW)
+
+        echo_detected:  bool = blocker.wait(self._TRIGGER_INTERVAL)
+
+        GPIO.remove_event_detect(self._ECHO_PIN)
 
         # The time from when the response pin goes high to when it goes
         # low is the delay betwen transmitting and receiving the
         # ultrasonic signals.
 
-        if GPIO.wait_for_edge(self._TRIGGER_PIN, GPIO.RISING,
-                              self._TRIGGER_INTERVAL * 1000.0) is not None:
+        if echo_detected:
+            duration:  float = end_time - start_time
 
-            start_time = time.time()
+            if duration <= self._ECHO_TIMEOUT:
+                return duration * self._SPEED_OF_SOUND / 2.0
 
-            if GPIO.wait_for_edge(self._TRIGGER_PIN, GPIO.FALLING,
-                                  self._ECHO_TIMEOUT * 1000.0) is not None:
-
-                return (time.time() - start_time) * self._SPEED_OF_SOUND / 2.0
-            else:
-                return None
-        else:
-            return None
+        return None
 
 # ======================================================================
 # NEOPIXEL STRIP CLASS DEFINITION
