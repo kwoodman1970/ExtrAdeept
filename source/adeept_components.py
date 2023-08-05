@@ -36,6 +36,7 @@ from typing import Callable, List, Union, Optional
 
 from RPi import GPIO
 from rpi_ws281x import Adafruit_NeoPixel
+from _rpi_ws281x import WS2812_STRIP
 
 # ======================================================================
 # PRIVATE FUNCTIONS
@@ -329,7 +330,7 @@ class UltrasonicSensor:
     speed of sound, then dividing by two.
 
     See `HC-SR04 datasheet
-    <https://cdn.sparkfun.com/datasheets/Sensors/Proximity/HCSR04.pdf>
+    <https://cdn.sparkfun.com/datasheets/Sensors/Proximity/HCSR04.pdf>`_
     (one of many sources) for details.
 
     IMPORTANT NOTE ABOUT ACCURACY:
@@ -467,80 +468,96 @@ class NeoPixelStrip(Adafruit_NeoPixel):
 
     Connect the first NeoPixel to the "WS2812" port on the Adeept HAT.
 
-    A WS2812 NeoPixel is an... uh... okay, it IS actually an RGB LED --
-    but with its own controller.  It has a DI conection for data input
-    and a DO connection for data output.  They can be daisy-chained and
-    only the first one is connected to the HAT.  Each one's colour can
-    be individually specified.
+    This class extends the Adafruit_NeoPixel class to make it behave
+    more like its C++ counterpart, plus adds some Python-specific
+    goodies.
 
-    IMPORTANT NOTE:  Instances of this class need to run with root
+    IMPORTANT NOTE:  Instances of this class need to run with superuser
     privileges because the base class's supporting libraries use DMA.
 
-    METHODS
-    =======
+    Parameters
+    ----------
+    data_pin:  int
+        The GPIO pin (output) that connects to the first NeoPixel's DI
+        connection.
+    numPixels:  int
+        The number of NeoPixels in the strip (must be greater than
+        zero).
 
-    __init__() -> None:
-        Prepare the strip of NeoPixels for use.
+    Other Parameters
+    ----------------
+    freq_hz:  int
+        The frequency of the display signal (in hertz).
+    dma:  int
+        The DMA channel to use.
+    invert:  bool
+        Should the signal line be inverted?
+    brightness:
+        A scale factor for the brightness of each LED in the strip (0 is
+        the darkest; 255 is the brightest).
+    channel:  int
+        The PWM channel to use.
+    strip_type:  int
+        The type of NeoPixels being used.  Import an appropriate
+        constant from `_rpi_ws281x
+        <https://github.com/jgarff/rpi_ws281x/blob/master/ws2811.h>`_
+        (such as WS2811_STRIP_GRB or WS2812_STRIP).
+    gamma:  List[float]
+        A custom gamma correction array based on a gamma correction
+        factor (must have 256 elements).
+    Raises
+    ------
+    ValueError
+        One or more arguments are invalid.
+    RuntimeError
+        The base class could not initialize the NeoPixels.
 
-    fill() -> None:
-        Set the colour(s) for some or all of the NeoPixels.
+    Notes
+    -----
+    A NeoPixel is an... uh... okay, it IS actually an RGB LED -- but
+    with its own controller.  It has a DI conection for data input and a
+    DO connection for data output.  They can be daisy-chained and only
+    the first one is connected to the HAT.  Each one's colour can be
+    individually specified.
 
-        This method was added to make the base class more like its C++
-        counterpart.
-
-    clear() -> None:
-        Turn all NeoPixels off.
-
-        This method was added to make the base class more like its C++
-        counterpart.
+    There is a dearth of documentation for the modules that control
+    NeoPixels, but the `Adafruit NeoPixel Class Reference
+    <https://adafruit.github.io/Adafruit_NeoPixel/html/class_adafruit___neo_pixel.html>`_
+    (for C++) is a good place to start.
     """
 
     # Class Private Properties
-    # ------------------------    #
-    #     DMA channel to use (DMA is why root privileges are required).
-    #
+    # ------------------------
+    # _DMA:  int
+    #     The DMA channel to use (DMA is why superuser privileges are
+    #     required).
     # _FREQUENCY:  int
-    # Private Properties
-    # ------------------    #
-    #     PWM channnel on the data pin to use.
-    #
+    #     The data stream's frequency (in Hz).
+    # _PWM_CHANNEL:  int
+    #     The PWM channnel on the data pin to use.
     # _BRIGHTNESS:  int
     #     Scale factor for brightness.
-    #
     # _INVERT:  bool
     #     Invert the signal line.
+    # _TYPE:  int
+    #     The type of NeoPixels that are being controlled.
 
     _DMA_CHANNEL:  int  = 10
     _FREQUENCY:    int  = 800000
     _PWM_CHANNEL:  int  = 0
     _BRIGHTNESS:   int  = 255
     _INVERT:       bool = False
+    _TYPE:         int  = WS2812_STRIP
 
     # ------------------------------------------------------------------
 
-    def __init__(self, data_pin:  int, num_pixels:  int) -> None:
+    def __init__(self, data_pin:  int, num_pixels:  int,
+                 freq_hz:  int = _FREQUENCY, dma:  int = _DMA_CHANNEL,
+                 invert:  bool = _INVERT, brightness:  int = _BRIGHTNESS,
+                 channel:  int = _PWM_CHANNEL, strip_type:  int = _TYPE,
+                 gamma:  Optional[List[float]] = None) -> None:
         """
         Prepare the strip of NeoPixels for use.
-
-        PARAMETERS
-        ==========
-
-        data_pin:  int
-            The GPIO pin (output) that connects to the first NeoPixel's
-            DI connection.
-
-        numPixels:  int
-            The number of NeoPixels in the strip (must be greater than
-            zero).
-
-        RAISES
-        ======
-
-        ValueError
-            One or more arguments are invalid.
-
-        RuntimeError
-            The base class could not initialize the NeoPixels.
         """
 
         _validate_gpio_pin_number(data_pin, "trigger_pin")
@@ -549,12 +566,11 @@ class NeoPixelStrip(Adafruit_NeoPixel):
             raise ValueError(f"\"num_pixels\" ({num_pixels}) must be "
                              f"greater than 0")
 
-        # The base class does most of the heavy lifting, and the
-        # parameters for its constructor are known ahead of time.
+        # The base class does most of the heavy lifting.
 
-        Adafruit_NeoPixel.__init__(self, num_pixels, data_pin, self._FREQUENCY,
-                                   self._DMA_CHANNEL, self._INVERT,
-                                   self._BRIGHTNESS, self._PWM_CHANNEL)
+        Adafruit_NeoPixel.__init__(self, num_pixels, data_pin, freq_hz, dma,
+                                   invert, brightness, channel, strip_type,
+                                   gamma)
         self.begin()
         atexit.register(self._neo_pixel_strip_atexit)
 
@@ -567,7 +583,10 @@ class NeoPixelStrip(Adafruit_NeoPixel):
 
         Changes will not take effect until ".show()" is called.
 
-        PARAMETERS
+        This method was added to make the base class more like its C++
+        counterpart.
+
+                PARAMETERS
         ==========
 
         color:  Union[int, List[int]]
@@ -642,6 +661,9 @@ class NeoPixelStrip(Adafruit_NeoPixel):
         Turn all NeoPixels off.
 
         Changes will not take effect until ".show()" is called.
+
+        This method was added to make the base class more like its C++
+        counterpart.
         """
 
         self.fill(0x000000)
