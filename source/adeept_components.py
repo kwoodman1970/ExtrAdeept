@@ -36,7 +36,7 @@ from typing import Callable, List, Union, Optional
 
 from RPi import GPIO
 from rpi_ws281x import Adafruit_NeoPixel
-from _rpi_ws281x import WS2812_STRIP
+from _rpi_ws281x import WS2812_STRIP, WS2811_TARGET_FREQ
 
 # ======================================================================
 # PRIVATE FUNCTIONS
@@ -468,9 +468,8 @@ class NeoPixelStrip(Adafruit_NeoPixel):
 
     Connect the first NeoPixel to the "WS2812" port on the Adeept HAT.
 
-    This class extends the Adafruit_NeoPixel class to make it behave
-    more like its C++ counterpart, plus adds some Python-specific
-    goodies.
+    This class extends the Adafruit_NeoPixel class to make it more like
+    its C++ counterpart.
 
     IMPORTANT NOTE:  Instances of this class need to run with superuser
     privileges because the base class's supporting libraries use DMA.
@@ -485,7 +484,7 @@ class NeoPixelStrip(Adafruit_NeoPixel):
         zero).
 
     Other Parameters
-    ----------------
+    ----------
     freq_hz:  int
         The frequency of the display signal (in hertz).
     dma:  int
@@ -505,6 +504,7 @@ class NeoPixelStrip(Adafruit_NeoPixel):
     gamma:  List[float]
         A custom gamma correction array based on a gamma correction
         factor (must have 256 elements).
+
     Raises
     ------
     ValueError
@@ -531,8 +531,6 @@ class NeoPixelStrip(Adafruit_NeoPixel):
     # _DMA:  int
     #     The DMA channel to use (DMA is why superuser privileges are
     #     required).
-    # _FREQUENCY:  int
-    #     The data stream's frequency (in Hz).
     # _PWM_CHANNEL:  int
     #     The PWM channnel on the data pin to use.
     # _BRIGHTNESS:  int
@@ -543,7 +541,6 @@ class NeoPixelStrip(Adafruit_NeoPixel):
     #     The type of NeoPixels that are being controlled.
 
     _DMA_CHANNEL:  int  = 10
-    _FREQUENCY:    int  = 800000
     _PWM_CHANNEL:  int  = 0
     _BRIGHTNESS:   int  = 255
     _INVERT:       bool = False
@@ -552,7 +549,7 @@ class NeoPixelStrip(Adafruit_NeoPixel):
     # ------------------------------------------------------------------
 
     def __init__(self, data_pin:  int, num_pixels:  int,
-                 freq_hz:  int = _FREQUENCY, dma:  int = _DMA_CHANNEL,
+                 freq_hz:  int = WS2811_TARGET_FREQ, dma:  int = _DMA_CHANNEL,
                  invert:  bool = _INVERT, brightness:  int = _BRIGHTNESS,
                  channel:  int = _PWM_CHANNEL, strip_type:  int = _TYPE,
                  gamma:  Optional[List[float]] = None) -> None:
@@ -560,7 +557,7 @@ class NeoPixelStrip(Adafruit_NeoPixel):
         Prepare the strip of NeoPixels for use.
         """
 
-        _validate_gpio_pin_number(data_pin, "trigger_pin")
+        _validate_gpio_pin_number(data_pin, "data_pin")
 
         if num_pixels <= 0:
             raise ValueError(f"\"num_pixels\" ({num_pixels}) must be "
@@ -571,13 +568,11 @@ class NeoPixelStrip(Adafruit_NeoPixel):
         Adafruit_NeoPixel.__init__(self, num_pixels, data_pin, freq_hz, dma,
                                    invert, brightness, channel, strip_type,
                                    gamma)
-        self.begin()
         atexit.register(self._neo_pixel_strip_atexit)
 
     # ------------------------------------------------------------------
 
-    def fill(self, color:  Union[int, List[int]],
-             pixels:  Optional[List[int]] = None) -> None:
+    def fill(self, color:  int = 0, first:  int = 0, count:  int = 0) -> None:
         """
         Set the colour(s) for some or all of the NeoPixels.
 
@@ -586,73 +581,48 @@ class NeoPixelStrip(Adafruit_NeoPixel):
         This method was added to make the base class more like its C++
         counterpart.
 
-                PARAMETERS
-        ==========
-
-        color:  Union[int, List[int]]
+        Parameters
+        ----------
+        color:  int (optional)
             The new colour or colours (24-bit RGB or 32-bit WRGB,
-            depending on the model of NeoPixel) to set "pixels" to.
+            depending on the model of NeoPixel) to set "pixels" to.  The
+            default value is 0 (black).
+        first:  int (optional)
+            0-based index of the first NeoPixel to change.  It must be
+            from 0 to the number of NeoPixels in the strip minus 1).
+            The default value is 0 (the first NeoPixel).
+        count:  int (optional)
+            The total number of NeoPixels to change.  It must be from 0
+            (meaning all NeoPixels from `count` upward) to the number of
+            NeoPixels in the strip.  The default is 0.
 
-            If "color" is a single integer then that colour is applied
-            to all of the NeoPixels in "pixels".
-
-            If "color" is a list then all of the colors in that list are
-            applied to "pixels" in the same order.  If there are fewer
-            colours than pixels then the pattern in "color" will repeat.
-
-            Colours can't be negative.
-
-        pixels:  Optional[List[int]] = None
-            A list of NeoPixel indices.  If "None" then all NeoPixels
-            will be changed.
-
-            All elements of "pixels" must be at least 0 and less than
-            the number of NeoPixels in the strip.
-
-        RAISES
-        ======
-
+        Raises
+        ------
         ValueError
             One or more arguments are invalid.
-
         """
 
-        # CONSTANTS
-        # =========
-        #
+        # Constants
+        # ---------
         # NUM_NEO_PIXELS:  int
         #     The number of NeoPixels in the strip.
 
         NUM_NEO_PIXELS = self.numPixels()
 
-        if pixels is None:
-            pixels2 = range(NUM_NEO_PIXELS)
-        else:
-            for element in pixels:
-                if (element < 0) or (element >= NUM_NEO_PIXELS):
-                    raise ValueError(f"Index in \"pixels\" ({element}) out of "
-                                     f"range (0-{NUM_NEO_PIXELS})")
+        # Validate the parameters.
 
-            pixels2 = pixels
+        if (first < 0) or (first >  NUM_NEO_PIXELS - 1):
+            raise ValueError(f"\"first\" ({first}) out of range (0-"
+                                f"{NUM_NEO_PIXELS - 1})")
 
-        if isinstance(color, list):
-            for element in color:
-                if element < 0:
-                    raise ValueError(f"Colour in \"color\" ({element}) can't "
-                                     f"be negative")
+        if (count < 0) or (count > NUM_NEO_PIXELS - first):
+            raise ValueError(f"\"count\" ({count}) out of range (0-"
+                                f"{NUM_NEO_PIXELS - first})")
 
-            # for i in range(len(pixels2)):
-            #     self.setPixelColor(pixels2[i], color[i % len(color)])
+        # Change the requested NeoPixels
 
-            for i, neo_pixel in enumerate(pixels2):
-                self.setPixelColor(neo_pixel, color[i % len(color)])
-        else:
-            if color < 0:
-                raise ValueError(f"\"color\" ({color}) can't be "
-                                    f"negative")
-
-            for i in pixels2:
-                self.setPixelColor(i, color)
+        for i in range(first, count if count != 0 else NUM_NEO_PIXELS):
+            self.setPixelColor(i, color)
 
     # ------------------------------------------------------------------
 
@@ -664,6 +634,11 @@ class NeoPixelStrip(Adafruit_NeoPixel):
 
         This method was added to make the base class more like its C++
         counterpart.
+
+        Raises
+        ------
+        ValueError
+            One or more arguments are invalid.
         """
 
         self.fill(0x000000)
@@ -729,8 +704,8 @@ class LineTracker():
             """
             Prepare an infrared sensor for use.
 
-            PARAMETERS
-            ==========
+            Parameters
+            ----------
 
             pin:  int
                 The GPIO pin that's connected to the infrared sensor.
@@ -890,8 +865,8 @@ class LineTracker():
         A callback function can only be added once; subsequent attempts
         to add it will be silently ignored.
 
-        PARAMETERS
-        ==========
+        Parameters
+        ----------
 
         callback:  Callable[[bool, bool, bool], None]
             The function to be called when an IR sensor's state changes.
@@ -920,8 +895,8 @@ class LineTracker():
         Attempts to remove a callback function that isn't registered
         will be silently ignored.
 
-        PARAMETERS
-        ==========
+        Parameters
+        ----------
 
         callback:  Callable[[bool, bool, bool], None]
             The callback function to be removed.  It must be of the
