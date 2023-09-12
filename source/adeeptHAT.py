@@ -207,7 +207,7 @@ class adeeptMotorHAT2:
         global _neoPixels
 
         try:
-            _neoPixels = NeoPixelStrip(12, numPixels)
+            _neoPixels = NeoPixelStrip(numPixels, 12)
         except RuntimeError:
             logging.warning("NeoPixels are not accessable.")
             _neoPixels = None

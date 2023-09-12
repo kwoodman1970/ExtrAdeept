@@ -476,32 +476,31 @@ class NeoPixelStrip(Adafruit_NeoPixel):
 
     Parameters
     ----------
-    data_pin:  int
-        The GPIO pin (output) that connects to the first NeoPixel's DI
-        connection.
     numPixels:  int
         The number of NeoPixels in the strip (must be greater than
         zero).
+    data_pin:  int
+        The GPIO pin (output) that connects to the first NeoPixel's DI
+        connection.
+    strip_type:  int (optional)
+        The type of NeoPixels being used.  Import an `appropriate
+        constant from _rpi_ws281x
+        <https://github.com/jgarff/rpi_ws281x/blob/master/ws2811.h#L46>`_
+        (such as `WS2811_STRIP_GRB` or `WS2812_STRIP`).  The default
+        value is `WS2812_STRIP`.
 
     Other Parameters
     ----------
-    freq_hz:  int
+    freq_hz:  int (optional)
         The frequency of the display signal (in hertz).
-    dma:  int
+    dma:  int (optional)
         The DMA channel to use.
-    invert:  bool
-        Should the signal line be inverted?
-    brightness:
+    brightness:  int (optional)
         A scale factor for the brightness of each LED in the strip (0 is
         the darkest; 255 is the brightest).
-    channel:  int
+    channel:  int (optional)
         The PWM channel to use.
-    strip_type:  int
-        The type of NeoPixels being used.  Import an appropriate
-        constant from `_rpi_ws281x
-        <https://github.com/jgarff/rpi_ws281x/blob/master/ws2811.h>`_
-        (such as WS2811_STRIP_GRB or WS2812_STRIP).
-    gamma:  List[float]
+    gamma:  List[float] (optional)
         A custom gamma correction array based on a gamma correction
         factor (must have 256 elements).
 
@@ -536,22 +535,19 @@ class NeoPixelStrip(Adafruit_NeoPixel):
     # _BRIGHTNESS:  int
     #     Scale factor for brightness.
     # _INVERT:  bool
-    #     Invert the signal line.
-    # _TYPE:  int
-    #     The type of NeoPixels that are being controlled.
+    #     Invert the signal line?.
 
     _DMA_CHANNEL:  int  = 10
     _PWM_CHANNEL:  int  = 0
     _BRIGHTNESS:   int  = 255
     _INVERT:       bool = False
-    _TYPE:         int  = WS2812_STRIP
 
     # ------------------------------------------------------------------
 
-    def __init__(self, data_pin:  int, num_pixels:  int,
+    def __init__(self, num_pixels:  int, data_pin:  int,
+                 strip_type:  int = WS2812_STRIP,
                  freq_hz:  int = WS2811_TARGET_FREQ, dma:  int = _DMA_CHANNEL,
-                 invert:  bool = _INVERT, brightness:  int = _BRIGHTNESS,
-                 channel:  int = _PWM_CHANNEL, strip_type:  int = _TYPE,
+                 brightness:  int = _BRIGHTNESS, channel:  int = _PWM_CHANNEL,
                  gamma:  Optional[List[float]] = None) -> None:
         """
         Prepare the strip of NeoPixels for use.
@@ -566,7 +562,7 @@ class NeoPixelStrip(Adafruit_NeoPixel):
         # The base class does most of the heavy lifting.
 
         Adafruit_NeoPixel.__init__(self, num_pixels, data_pin, freq_hz, dma,
-                                   invert, brightness, channel, strip_type,
+                                   _INVERT, brightness, channel, strip_type,
                                    gamma)
         atexit.register(self._neo_pixel_strip_atexit)
 
