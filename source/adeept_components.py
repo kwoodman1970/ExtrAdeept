@@ -674,41 +674,32 @@ class LineTracker():
     functions.
     """
 
+    CALLBACK_TYPE = Callable[[bool, bool, bool], None]
+
     class _IRSensor():
         """
         Manage an infrared sensor.
 
-        METHODS
-        =======
+        Parameters
+        ----------
+        pin:  int
+            The GPIO pin (input) that's connected to the infrared
+            sensor.
 
-        __init__() -> None:
-            Prepare an infred sensor for use.
+        on_change_any:  _CALLBACK_TYPE
+            Event handler for when any of the infrared sensors changes
+            state.
 
-        _monitor() -> None:
-            Event handler for when the infrared sensor changes state.
-
-
-        PROPERTIES
-        ==========
-
+        Properties
+        ----------
         state:  int
-            The state of the IR sensor (GPIO.LOW or GPIO.HIGH).
+            The current state of the IR sensor (GPIO.LOW or GPIO.HIGH).
         """
 
         def __init__(self, pin:  int,
                      on_change_any:  Callable[[], None]) -> None:
             """
             Prepare an infrared sensor for use.
-
-            Parameters
-            ----------
-
-            pin:  int
-                The GPIO pin that's connected to the infrared sensor.
-
-            monitor:  Callable[[], None]
-                Event handler for when any of the infrared sensors
-                changes state.
             """
 
             _validate_gpio_pin_number(pin, "pin")
@@ -727,9 +718,8 @@ class LineTracker():
             """
             The current state of the infrared sensor.
 
-            RETURNS
-            =======
-
+            Returns
+            -------
             GPIO.LOW or GPIO.HIGH.
             """
 
@@ -738,6 +728,11 @@ class LineTracker():
         def _on_change(self, pin:  int) -> None:
             """
             Event handler for when the infrared sensor changes state.
+
+            Parameters
+            ----------
+            pin:  int
+                The GPIO pin (input) whose state has changed.
             """
 
             assert pin == self._PIN, \
@@ -752,22 +747,6 @@ class LineTracker():
                  line_is_white:  bool = False) -> None:
         """
         Manage an infrared sensor.
-
-        METHODS
-        =======
-
-        __init__()
-            Prepare an infred sensor for use.
-
-        _monitor()
-            Event handler for when the infrared sensor changes state.
-
-
-        PROPERTIES
-        ==========
-
-        state:  int
-            The state of the IR sensor (GPIO.LOW or GPIO.HIGH).
         """
 
 
@@ -813,9 +792,8 @@ class LineTracker():
         """
         Get the state of the left IR sensor.
 
-        RETURNS
-        =======
-
+        Returns
+        -------
         True if a line was detected, False if otherwise.
         """
 
@@ -828,9 +806,8 @@ class LineTracker():
         """
         Get the state of the middle IR sensor.
 
-        RETURNS
-        =======
-
+        Returns
+        -------
         True if a line was detected, False if otherwise.
         """
 
@@ -843,9 +820,8 @@ class LineTracker():
         """
         Get the state of the right IR sensor.
 
-        RETURNS
-        =======
-
+        Returns
+        -------
         True if a line was detected, False if otherwise.
         """
 
@@ -853,29 +829,20 @@ class LineTracker():
 
     # ------------------------------------------------------------------
 
-    def add_callback(self,
-                     callback:  Callable[[bool, bool, bool], None]) -> None:
+    def add_callback(self, callback:  CALLBACK_TYPE) -> None:
         """
         Add a function to be called when an IR sensor's state changes.
 
         A callback function can only be added once; subsequent attempts
         to add it will be silently ignored.
 
+        Callback functions should exit as soon as possible since state
+        changes can occur rapidly.
+
         Parameters
         ----------
-
-        callback:  Callable[[bool, bool, bool], None]
+        callback:  CALLBACK_TYPE
             The function to be called when an IR sensor's state changes.
-            It must be of the following form:
-
-                name(left:  bool, middle:  bool, right:  bool) -> None
-
-            where "left", "middle" and "right" are the detection states
-            of the IR sensors.  Be aware that more than one sensor can
-            be True at any given time.
-
-            Callback functions should exit as soon as possible since
-            state changes can occur rapidly.
         """
 
         if callback not in self._callbacks:
@@ -883,8 +850,7 @@ class LineTracker():
 
     # ------------------------------------------------------------------
 
-    def remove_callback(self,
-                        callback:  Callable[[bool, bool, bool], None]) -> None:
+    def remove_callback(self, callback:  CALLBACK_TYPE) -> None:
         """
         Remove a prevously-added callback function.
 
@@ -893,12 +859,8 @@ class LineTracker():
 
         Parameters
         ----------
-
-        callback:  Callable[[bool, bool, bool], None]
-            The callback function to be removed.  It must be of the
-            following form:
-
-                name(left:  bool, middle:  bool, right:  bool) -> None
+        callback:  CALLBACK_TYPE
+            The callback function to be removed.
         """
 
 
