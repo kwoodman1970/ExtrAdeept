@@ -36,7 +36,7 @@ from typing import Callable, List, Union, Optional
 
 from RPi import GPIO
 from rpi_ws281x import Adafruit_NeoPixel
-from _rpi_ws281x import WS2812_STRIP, WS2811_TARGET_FREQ
+from _rpi_ws281x.ws import WS2812_STRIP, WS2811_TARGET_FREQ
 
 # ======================================================================
 # PRIVATE FUNCTIONS
@@ -490,7 +490,7 @@ class NeoPixelStrip(Adafruit_NeoPixel):
         value is `WS2812_STRIP`.
 
     Other Parameters
-    ----------
+    ----------------
     freq_hz:  int (optional)
         The frequency of the display signal (in hertz).
     dma:  int (optional)
@@ -562,8 +562,8 @@ class NeoPixelStrip(Adafruit_NeoPixel):
         # The base class does most of the heavy lifting.
 
         Adafruit_NeoPixel.__init__(self, num_pixels, data_pin, freq_hz, dma,
-                                   _INVERT, brightness, channel, strip_type,
-                                   gamma)
+                                   self._INVERT, brightness, channel,
+                                   strip_type, gamma)
         atexit.register(self._neo_pixel_strip_atexit)
 
     # ------------------------------------------------------------------
@@ -650,228 +650,94 @@ class NeoPixelStrip(Adafruit_NeoPixel):
         self.show()
 
 # ======================================================================
-# LINETRACKER CLASS DEFINITION
+# IRWSENSOR CLASS DEFINITION
 # ======================================================================
 
-class LineTracker():
+class IRSensor():
     """
-    Read the outputs of a line-tracking module.
+    Monitor a single infrared sensor on a line-tracking module.
 
     Connect the line-tracking module to the "Tracking" port on the
     Adeept HAT.
 
     The line-tracking module has three infrared emitters & sensors on
     it.  Each sensor is connected to a pin on the GPIO.  A white surface
-    will set the pin HIGH; a black surface will set the pin LOW.
+    will set the pin LOW; a black surface will set the pin HIGH.
 
     Sensitivity can be adjusted by turning the on-board potentiometer
     with a Phillips screwdriver.
 
-    Instances of this class can be set to detect either black lines on a
-    white surface (default) or white lines on a black surface.
+    Parameters
+    ----------
+    pin:  int
+        The GPIO pin (input) that's connected to the infrared
+        sensor.
 
-    Two means of detection are supported:  polling and callback
-    functions.
+    on_change_any:  Optional[Callable[[], None]]
+        Event handler for when any of the infrared sensors changes
+        state.
+
+    Attributes
+    ----------
+    state
+
+    See Also
+    --------
+    adeept_linetracker.LineTracker
+
+    Notes
+    -----
+    This class is separate from the LineTracker class because the
+    infrared sensors on the line-tracking module could be used for
+    purposes other than tracking lines.
     """
 
-    CALLBACK_TYPE = Callable[[bool, bool, bool], None]
-
-    class _IRSensor():
+    def __init__(self, pin:  int,
+                 on_change_any:  Optional[Callable[[], None]]) -> None:
         """
-        Manage an infrared sensor.
-
-        Parameters
-        ----------
-        pin:  int
-            The GPIO pin (input) that's connected to the infrared
-            sensor.
-
-        on_change_any:  _CALLBACK_TYPE
-            Event handler for when any of the infrared sensors changes
-            state.
-
-        Properties
-        ----------
-        state:  int
-            The current state of the IR sensor (GPIO.LOW or GPIO.HIGH).
+        Prepare an infrared sensor for use.
         """
 
-        def __init__(self, pin:  int,
-                     on_change_any:  Callable[[], None]) -> None:
-            """
-            Prepare an infrared sensor for use.
-            """
+        _validate_gpio_pin_number(pin, "pin")
 
-            _validate_gpio_pin_number(pin, "pin")
+        GPIO.setup(pin, GPIO.IN)
 
-            GPIO.setup(pin, GPIO.IN)
+        self._PIN:            int                          = pin
+        self._ON_CHANGE_ANY:  Optional[Callable[[], None]] = on_change_any
+        self._state:          int                          = GPIO.input(pin)
 
-            self._PIN:            int                = pin
-            self._ON_CHANGE_ANY:  Callable[[], None] = on_change_any
-            self._state:          int                = GPIO.input(pin)
+        GPIO.add_event_detect(pin, GPIO.BOTH)
+        GPIO.add_event_callback(pin, self._on_change)
 
-            GPIO.add_event_detect(pin, GPIO.BOTH)
-            GPIO.add_event_callback(pin, self._on_change)
+    @property
+    def state(self) -> int:
+        """
+        Return the current state of the infrared sensor.
 
-        @property
-        def state(self) -> int:
-            """
-            The current state of the infrared sensor.
+        Returns
+        -------
+        GPIO.LOW (white surface detected) or GPIO.HIGH (black surface
+        detected).
+        """
 
-            Returns
-            -------
-            GPIO.LOW or GPIO.HIGH.
-            """
+        return self._state
 
-            return self._state
+    def _on_change(self, pin:  int) -> None:
+        # Event handler for when the infrared sensor changes state.
+        #
+        # Parameters
+        # ----------
+        # pin:  int
+        #     The GPIO pin (input) whose state has changed (should be
+        #     the same as pin passed to the constructor).
 
-        def _on_change(self, pin:  int) -> None:
-            """
-            Event handler for when the infrared sensor changes state.
+        assert pin == self._PIN, \
+               f"pin {pin} is not the same as self._PIN {self._PIN}"
 
-            Parameters
-            ----------
-            pin:  int
-                The GPIO pin (input) whose state has changed.
-            """
+        self._state = GPIO.input(self._PIN)
 
-            assert pin == self._PIN, \
-                   f"pin {pin} is not the same as self._PIN {self._PIN}"
-
-            self._state = GPIO.input(self._PIN)
-
+        if self._ON_CHANGE_ANY is not None:
             self._ON_CHANGE_ANY()
-
-
-    def __init__(self, pin_left:  int, pin_middle:  int, pin_right:  int,
-                 line_is_white:  bool = False) -> None:
-        """
-        Manage an infrared sensor.
-        """
-
-
-        self._PIN_LEFT:   self._IRSensor = self._IRSensor(pin_left,
-                                                          self._on_change)
-        self._PIN_MIDDLE: self._IRSensor = self._IRSensor(pin_middle,
-                                                          self._on_change)
-        self._PIN_RIGHT:  self._IRSensor = self._IRSensor(pin_right,
-                                                          self._on_change)
-
-        if line_is_white is True:
-            self._detection_state = GPIO.LOW
-        elif line_is_white is False:
-            self._detection_state = GPIO.HIGH
-        else:
-            raise ValueError(f"line_is_white ({line_is_white}) must be either "
-                             f"True or False.")
-
-        self._callbacks:  List[Callable[[bool, bool, bool], None]] = []
-
-    # ------------------------------------------------------------------
-
-    def line_is_white(self) -> None:
-        """
-        Sets the module to track a white line on a black background.
-        """
-
-        self._detection_state = GPIO.LOW
-
-    # ------------------------------------------------------------------
-
-    def line_is_black(self) -> None:
-        """
-        Sets the module to track a black line on a white background.
-        """
-
-        self._detection_state = GPIO.HIGH
-
-    # ------------------------------------------------------------------
-
-    @property
-    def left(self) -> bool:
-        """
-        Get the state of the left IR sensor.
-
-        Returns
-        -------
-        True if a line was detected, False if otherwise.
-        """
-
-        return self._PIN_LEFT.state == self._detection_state
-
-    # ------------------------------------------------------------------
-
-    @property
-    def middle(self) -> bool:
-        """
-        Get the state of the middle IR sensor.
-
-        Returns
-        -------
-        True if a line was detected, False if otherwise.
-        """
-
-        return self._PIN_MIDDLE.state == self._detection_state
-
-    # ------------------------------------------------------------------
-
-    @property
-    def right(self) -> bool:
-        """
-        Get the state of the right IR sensor.
-
-        Returns
-        -------
-        True if a line was detected, False if otherwise.
-        """
-
-        return self._PIN_RIGHT.state == self._detection_state
-
-    # ------------------------------------------------------------------
-
-    def add_callback(self, callback:  CALLBACK_TYPE) -> None:
-        """
-        Add a function to be called when an IR sensor's state changes.
-
-        A callback function can only be added once; subsequent attempts
-        to add it will be silently ignored.
-
-        Callback functions should exit as soon as possible since state
-        changes can occur rapidly.
-
-        Parameters
-        ----------
-        callback:  CALLBACK_TYPE
-            The function to be called when an IR sensor's state changes.
-        """
-
-        if callback not in self._callbacks:
-            self._callbacks.append(callback)
-
-    # ------------------------------------------------------------------
-
-    def remove_callback(self, callback:  CALLBACK_TYPE) -> None:
-        """
-        Remove a prevously-added callback function.
-
-        Attempts to remove a callback function that isn't registered
-        will be silently ignored.
-
-        Parameters
-        ----------
-        callback:  CALLBACK_TYPE
-            The callback function to be removed.
-        """
-
-
-        if callback in self._callbacks:
-            self._callbacks.remove(callback)
-
-    # ------------------------------------------------------------------
-
-    def _on_change(self) -> None:
-        for listener in self._callbacks:
-            listener(self.left, self.middle, self.right)
 
 # ======================================================================
 # BUZZERACTIVE CLASS DEFINITION
