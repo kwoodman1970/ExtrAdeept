@@ -110,6 +110,11 @@ class DriveMotor:
     ----------
     speed
 
+    Raises
+    ------
+    ValueError
+        One or more arguments are invalid.
+
     Notes
     -----
     An L298 controller has a VOLTAGE SUPPLY (Vs) connection (up to 42V,
@@ -146,11 +151,6 @@ class DriveMotor:
     INPUT connections are connected to GPIO I/O pins and the OUTPUT
     connections are connected to the HAT's "Motor A" and "Motor B"
     ports.
-
-    Raises
-    ------
-    ValueError
-        One or more arguments are invalid.
     """
 
     # Class Private Properties
@@ -650,7 +650,7 @@ class NeoPixelStrip(Adafruit_NeoPixel):
         self.show()
 
 # ======================================================================
-# IRWSENSOR CLASS DEFINITION
+# IRSENSOR CLASS DEFINITION
 # ======================================================================
 
 class IRSensor():
@@ -738,161 +738,6 @@ class IRSensor():
 
         if self._ON_CHANGE_ANY is not None:
             self._ON_CHANGE_ANY()
-
-# ======================================================================
-# BUZZERACTIVE CLASS DEFINITION
-# ======================================================================
-
-class BuzzerActive:
-    """
-    This class controls an active buzzer.
-
-    An active buzzer has a built-in oscillator and only needs a steady
-    DC current to make a sound.  It is simpler to operate than a
-    passive buzzer but there is no way to change its frequency.
-
-    Connect the buzzer to the "Buzzer" port on the Adeept HAT.
-    """
-
-    def __init__(self, pin:  int, lowIsOff:  bool = False) -> None:
-        """
-        This constructor sets up an active buzzer.
-
-        NOTE:  Most active buzzers are wired so that a high signal from
-        the GPIO silences them and a low signal makes them buzz (please
-        don't ask why -- it doesn't make sense to me, either, but it's
-        because of the transistors that are used).  If, however, the
-        buzzer that's connected to the HAT behaves differently then set
-        "lowIsOff" to True.
-
-        ARGUMENTS
-        =========
-
-        pin      -- the GPIO pin that controls the buzzer
-        lowIsOff -- a low GPIO signal turns the buzzer off instead of
-                    on
-
-        RAISES
-        ======
-
-        ValueError -- raised if "pin" isn't a valid GPIO BCM pin
-        """
-
-        self._pin = pin
-
-        if lowIsOff:
-            self._off = GPIO.LOW
-            self._on  = GPIO.HIGH
-        else:
-            self._off = GPIO.HIGH
-            self._on  = GPIO.LOW
-
-        GPIO.setup(self._pin, GPIO.OUT, initial = self._off)
-
-    # ------------------------------------------------------------------
-
-    def start(self) -> None:
-        """
-        This method makes the buzzer buzz.
-        """
-
-        GPIO.output(self._pin, self._on)
-
-    # ------------------------------------------------------------------
-
-    def stop(self) -> None:
-        """
-        This method silences the buzzer.
-        """
-
-        GPIO.output(self._pin, self._off)
-
-# ======================================================================
-# BUZZERPASSIVE CLASS DEFINITION
-# ======================================================================
-
-class BuzzerPassive:
-    """
-    This class controls a passive buzzer.
-
-    A passive buzzer needs an oscillating current to make a sound.  It
-    is slightly more complex to operate than an active buzzer but its
-    frequency can be changed.
-
-    Connect the buzzer to the "Buzzer" port on the Adeept HAT.
-    """
-
-    _PWMDutyCycle = 50             # makes a nice, even PWM square wave
-
-    def __init__(self, pin:  int) -> None:
-        """
-        This constructor sets up a passive buzzer.
-
-        ARGUMENTS
-        =========
-
-        pin -- the GPIO pin that controls the buzzer's frequency
-
-        RAISES
-        ======
-
-        ValueError -- raised if "pin" isn't a valid GPIO BCM pin
-        """
-
-        self._pin          = pin
-        self._PWMFrequency = 0
-
-        GPIO.setup(self._pin, GPIO.OUT, initial = GPIO.LOW)
-
-        self._CONTROLLER = GPIO.PWM(self._pin, 0)
-
-    # ------------------------------------------------------------------
-
-    def setFrequency(self, frequency:  int) -> None:
-        """
-        This method sets the frequency that the buzzer is to sound at.
-
-        The buzzer can be silenced by setting its frequency to 0.
-
-        ARGUMENTS
-        =========
-
-        frequency -- the buzzer's new frequency (in hertz)
-
-        RAISES
-        ======
-
-        ValueError -- raised if "frequency" is negative
-        """
-
-        if (type(frequency) != int) or (frequency < 0):
-            raise ValueError(f"\"frequency\" ({frequency}) must be a whole " \
-                             "number.")
-
-        # If "frequency" is 0 then the buzzer is silenced -- otherwise,
-        # the buzzer is set to "frequency".  If the buzzer had
-        # previously been silenced then it must be started again.
-
-        if frequency == 0:
-            self._CONTROLLER.stop()
-        else:
-            self._CONTROLLER.ChangeFrequency(frequency)
-
-            if self._PWMFrequency == 0:
-                self._CONTROLLER.start(self._PWMDutyCycle)
-
-        # Remember the new frequency.
-
-        self._PWMFrequency = frequency
-
-    # ------------------------------------------------------------------
-
-    def stop(self) -> None:
-        """
-        This method silences the buzzer.
-        """
-
-        self._CONTROLLER.stop()
 
 # ======================================================================
 # RGB_LED CLASS DEFINITION

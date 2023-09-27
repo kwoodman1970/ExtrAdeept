@@ -1,3 +1,11 @@
+"""
+Class for using an Adeept HAT line-tracking module.
+
+To use, add the following line to the top of your module:
+
+    from adeept_components_linetracker import LineTracker
+"""
+
 from typing import Callable, List
 
 from RPi import GPIO

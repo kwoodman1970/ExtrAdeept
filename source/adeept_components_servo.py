@@ -1,4 +1,3 @@
-#!/usr/bin/python3
 """
 Class for controlling Adeept HAT servos.
 
