@@ -12,7 +12,11 @@ buzzer is connected to that HAT) to the top of your module:
 # IMPORTS FROM OTHER MODULES
 # ======================================================================
 
+from typing import Union
+
 from RPi import GPIO
+
+from adeept_components import _validate_gpio_pin_number
 
 # ======================================================================
 # BUZZERACTIVE CLASS DEFINITION
@@ -43,6 +47,8 @@ class BuzzerActive:
         """
         Prepare an active buzzer for use.
         """
+
+        _validate_gpio_pin_number(pin, "pin")
 
         self._PIN = pin
 
@@ -83,7 +89,11 @@ class BuzzerPassive:
     Parameters
     ----------
     pin:  int
-        The GPIO pin (output) that controls the buzzer's frequency,
+        The GPIO pin (output) that controls the buzzer's frequency.
+
+    Attributes
+    ----------
+    frequency
 
     Raises
     ------
@@ -96,20 +106,49 @@ class BuzzerPassive:
     # _PWM_DUTY_CYCLE:  int
     #     The PWM duty cycle to use when making the buzzer buzz.  It
     #     should be a square wave otherwise the buzzer may sound weak
-    #     or strange and eventually burn out.
+    #     or strange and burn out prematurely.
+    #
+    # Instance Constants
+    # ------------------
+    # _PIN:  int
+    #     The GPIO pin (output) that controls the buzzer's frequency.
+    #
+    # Instance Variables
+    # ------------------
+    # _frequency:  int
+    #     The frequency that the buzzer is currently buzzing at (in
+    #     hertz).
+    # _controller:  Union[RPi.GPIO.PWM, None]
+    #     The PWM contoller for the buzzer (used to change the buzzer's
+    #     frequency), if any.
+    #
+    # Class Invariants
+    # ----------------
+    # If _controller is None then _frequency MUST be 0.
+    #
+    # Design Notes
+    # ------------
+    # A GPIO.PWM isntance cannot be created in a stopped state.
+    # Therefore, an instance isn't created until it's first needed (i.e.
+    # when set_frequency() is called with a non-zero argument).
 
-    _PWM_DUTY_CYCLE:  int = 50      # makes a nice, even PWM square wave
+    _PWM_DUTY_CYCLE:  int = 50      # makes a nice, even square PWM wave
+
+    # ------------------------------------------------------------------
 
     def __init__(self, pin:  int) -> None:
         """
         Prepare a passive buzzer for use.
         """
 
-        self._PIN           = pin
-        self._frequency = 0
+        _validate_gpio_pin_number(pin, "pin")
+
+        self._PIN:        int = pin
+        self._frequency:  int = 0
 
         GPIO.setup(self._PIN, GPIO.OUT, initial = GPIO.LOW)
-        self._CONTROLLER = GPIO.PWM(self._PIN, 0)
+
+        self._controller:  Union[GPIO.PWM, None] = None
 
     # ------------------------------------------------------------------
 
@@ -117,7 +156,7 @@ class BuzzerPassive:
         """
         Set the frequency that the buzzer is to sound at.
 
-        The buzzer can be silenced by setting its frequency to 0.
+        The buzzer can be silenced by setting its frequency to 0 hertz.
 
         Parameters
         ----------
@@ -127,7 +166,7 @@ class BuzzerPassive:
         Raises
         ------
         ValueError
-            "frequency" is negative.
+            "new_frequency" is negative.
 
         Notes
         -----
@@ -140,18 +179,25 @@ class BuzzerPassive:
             raise ValueError(f"\"new_frequency\" ({new_frequency}) must be " \
                              "a whole number.")
 
-        # If "frequency" is 0 then the buzzer is silenced and PWM is
-        # stopped -- otherwise, the buzzer is set to "frequency".  If
-        # the buzzer had previously been silenced then PWM must be
-        # started again.
+        assert (self._controller is not None) or (self._frequency == 0)
+
+        # If "new_frequency" is 0 then silence the buzzer by stopping
+        # PWM (if the PWM controller exists) -- otherwise, set the
+        # buzzer's frequency to "new_frequency" (creating a new PWM
+        # controller if necessary).  If the buzzer was previously silent
+        # then start PWM.
 
         if new_frequency == 0:
-            self._CONTROLLER.stop()
+            if self._controller is not None:
+                self._controller.stop()
         else:
-            self._CONTROLLER.ChangeFrequency(new_frequency)
+            if self._controller is None:
+                self._controller = GPIO.PWM(self._PIN, new_frequency)
+            else:
+                self._controller.ChangeFrequency(new_frequency)
 
             if self._frequency == 0:
-                self._CONTROLLER.start(self._PWM_DUTY_CYCLE)
+                self._controller.start(self._PWM_DUTY_CYCLE)
 
         # Remember the new frequency.
 
@@ -167,3 +213,8 @@ class BuzzerPassive:
         # Code re-use at its finest.
 
         self.set_frequency(0)
+
+    # ------------------------------------------------------------------
+
+    frequency = property(lambda self:  self._frequency, set_frequency, None,
+                         "The buzzer's frequency (in hertz).")
