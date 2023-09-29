@@ -1,9 +1,10 @@
 """
 Classes for controlling Adeept HAT buzzers.
 
-To use, add one of the following lines (depending on which type of
-buzzer is connected to that HAT) to the top of your module:
+To use, add one of the following lines (as appropriate) to the top of
+your module:
 
+    from adeept_components_buzzers import Buzzer
     from adeept_components_buzzers import BuzzerActive
     from adeept_components_buzzers import BuzzerPassive
 """
@@ -19,28 +20,81 @@ from RPi import GPIO
 from adeept_components import _validate_gpio_pin_number
 
 # ======================================================================
+# BUZZER CLASS DEFINITION
+# ======================================================================
+
+class Buzzer:
+    """
+    Base class for buzzer classes.
+
+    Connect the buzzer to the "Buzzer" port on the Adeept HAT.
+
+    Parameters
+    ----------
+    pin:  int
+        The GPIO pin (output) that controls the buzzer.
+
+    Raises
+    ------
+    ValueError
+        "pin" isn't a valid GPIO BCM pin.
+    """
+
+    # Instance Constants
+    # ------------------
+    # _PIN:  int
+    #     The GPIO pin (output) that controls the buzzer.  Descendant
+    #     classes can use this constant.
+
+    def __init__(self, pin:  int) -> None:
+        """
+        Prepare a buzzer for use.
+        """
+
+        _validate_gpio_pin_number(pin, "pin")
+
+        self._PIN = pin
+
+    # ------------------------------------------------------------------
+
+    def stop(self) -> None:
+        """
+        Silence the buzzer.
+        """
+
+        # Descendant classes MUST override this method with their own
+        # implementation.
+
+# ======================================================================
 # BUZZERACTIVE CLASS DEFINITION
 # ======================================================================
 
-class BuzzerActive:
+class BuzzerActive(Buzzer):
     """
     Control an active buzzer.
 
     Connect the buzzer to the "Buzzer" port on the Adeept HAT.
 
-    An active buzzer has a built-in oscillator and only needs a steady
-    DC current to make a sound.  It is simpler to operate than a
-    passive buzzer but there is no way to change its frequency.
+    Acive buzzers have two connections:  POSITIVE (the longer pin, and
+    can be connected to a voltage source) and NEGATIVE (the shorter pin,
+    and can be connected to a ground).  As power flows through the
+    buzzer, a built-in oscillator vibrates at a fixed frequency.
+
+    A GPIO data pin doesn't have enough power on its own to drive an
+    active buzzer -- therefore, it must be connected to a transister
+    that's also connected to a +3.3V or +5V pin.  The buzzer can then be
+    turned on and off by setting the data pin high and low,
+    respectively.
 
     Parameters
     ----------
     pin:  int
-        The GPIO pin (out) that controls the buzzer.
+        The GPIO pin (output) that controls the buzzer.
 
     Raises
     ------
     ValueError
-        "pin" isn't a valid GPIO BCM pin
+        "pin" isn't a valid GPIO BCM pin.
     """
 
     def __init__(self, pin:  int) -> None:
@@ -48,10 +102,7 @@ class BuzzerActive:
         Prepare an active buzzer for use.
         """
 
-        _validate_gpio_pin_number(pin, "pin")
-
-        self._PIN = pin
-
+        Buzzer.__init__(self, pin)
         GPIO.setup(self._PIN, GPIO.OUT, initial = GPIO.LOW)
 
     # ------------------------------------------------------------------
@@ -76,15 +127,22 @@ class BuzzerActive:
 # BUZZERPASSIVE CLASS DEFINITION
 # ======================================================================
 
-class BuzzerPassive:
+class BuzzerPassive(Buzzer):
     """
     Control a passive buzzer.
 
     Connect the buzzer to the "Buzzer" port on the Adeept HAT.
 
-    A passive buzzer needs an oscillating current to make a sound.  It
-    is slightly more complex to operate than an active buzzer but its
-    frequency can be changed.
+    Passive buzzers have two connections that are connected to an
+    alternating current source.  The frequency at which the current
+    alternates is the frequency of the buzzer's sound.
+
+    A GPIO data pin doesn't have enough power on its own to drive a
+    passive buzzer -- therefore, it must be connected to a transister
+    that's also connected to a +3.3V or +5V pin.  The buzzer can then be
+    turned on by using PWM on the data pin and turned off by stopping
+    PWM (a square PWM wave is the closest that the GPIO can come to an
+    alternating current).
 
     Parameters
     ----------
@@ -98,7 +156,14 @@ class BuzzerPassive:
     Raises
     ------
     ValueError
-        "pin" isn't a valid GPIO BCM pin
+        "pin" isn't a valid GPIO BCM pin.
+
+    Notes
+    -----
+    According to `Wikipedia
+    <https://en.wikipedia.org/wiki/Hearing_range>`, human hearing range
+    is commonly given as 20Hz to 20,000Hz.  Furthermore, different
+    passive buzzers have different frequency ranges.
     """
 
     # Class Constants
@@ -107,11 +172,6 @@ class BuzzerPassive:
     #     The PWM duty cycle to use when making the buzzer buzz.  It
     #     should be a square wave otherwise the buzzer may sound weak
     #     or strange and burn out prematurely.
-    #
-    # Instance Constants
-    # ------------------
-    # _PIN:  int
-    #     The GPIO pin (output) that controls the buzzer's frequency.
     #
     # Instance Variables
     # ------------------
@@ -128,9 +188,9 @@ class BuzzerPassive:
     #
     # Design Notes
     # ------------
-    # A GPIO.PWM isntance cannot be created in a stopped state.
+    # A GPIO.PWM instance cannot be created with a frequency of 0 hertz.
     # Therefore, an instance isn't created until it's first needed (i.e.
-    # when set_frequency() is called with a non-zero argument).
+    # when "set_frequency()"" is called with a non-zero argument).
 
     _PWM_DUTY_CYCLE:  int = 50      # makes a nice, even square PWM wave
 
@@ -141,13 +201,10 @@ class BuzzerPassive:
         Prepare a passive buzzer for use.
         """
 
-        _validate_gpio_pin_number(pin, "pin")
-
-        self._PIN:        int = pin
-        self._frequency:  int = 0
-
+        Buzzer.__init__(self, pin)
         GPIO.setup(self._PIN, GPIO.OUT, initial = GPIO.LOW)
 
+        self._frequency:   int                   = 0
         self._controller:  Union[GPIO.PWM, None] = None
 
     # ------------------------------------------------------------------
@@ -160,19 +217,13 @@ class BuzzerPassive:
 
         Parameters
         ----------
-        frequency:  int
+        new_frequency:  int
             The buzzer's new frequency (in hertz).
 
         Raises
         ------
         ValueError
             "new_frequency" is negative.
-
-        Notes
-        -----
-        According to `Wikipedia
-        <https://en.wikipedia.org/wiki/Hearing_range>`, human hearing
-        range is commonly given as 20Hz to 20,000Hz.
         """
 
         if new_frequency < 0:
@@ -183,7 +234,7 @@ class BuzzerPassive:
 
         # If "new_frequency" is 0 then silence the buzzer by stopping
         # PWM (if the PWM controller exists) -- otherwise, set the
-        # buzzer's frequency to "new_frequency" (creating a new PWM
+        # buzzer's frequency to "new_frequency" (creating a PWM
         # controller if necessary).  If the buzzer was previously silent
         # then start PWM.
 
