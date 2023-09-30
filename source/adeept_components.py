@@ -744,71 +744,77 @@ class IRSensor():
 # ======================================================================
 
 class RGB_LED:
-# This class is an interface for an RGB LED (not to be confused with a NeoPixel).
-#
-# An RGB LED uses three GPIO pins -- one for each of its primary color emiters.  The brightness
-# of each emiter is controlled through pulse-width modulation.
-#
-# Connect the RGB LED to either the "RGB1" or "RGB2" port on the Adeept Motor HAT.
+    """
+    Control an RGB LED (not to be confused with a NeoPixel).
 
-    _PWMFrequency = 50                        # the PWM frequency that the RGB LED operates at
+    Connect the RGB LED to either the "RGB1" or "RGB2" port on the
+    Adeept HAT.
 
-    def __init__(self, pinRed, pinGreen, pinBlue):
-    # This constructor initializes an RGB LED.
-    #
-    # "portNumber" is the RGB port on the HAT and must be either 1 or 2.
+    An RGB LED uses three GPIO pins -- one for each of its primary
+    colour emitters.  The brightness of each emitter is controlled
+    through pulse-width modulation.
 
-        # First, the GPIO pins are sorted out.  There are three pins per RGB LED corresponding
-        # to the three primary colors.
+    Parameters
+    ----------
+    red_pin:    int
+    green_pin:  int
+    blue_pin:   int
+        The GPIO pins (output) for each of the three primary colours.
 
-        self._pinRed   = pinRed
-        self._pinGreen = pinGreen
-        self._pinBlue  = pinBlue
+    Raises
+    ------
+    ValueError
+        At least one of the arguments isn't a valid GPIO BCM pin.
+    """
 
-        self._pins = {"Red":pinRed, "Green":pinGreen, "Blue":pinBlue}
+    class _Emitter:
+        _PWM_FREQUENCY:  int = 240  # PWM frequency that the RGB LED operates at
 
-        # Next, the pins are initialized.  Brighness is controlled by pulse-wave modulation so
-        # each pin's PWM object is obtained and initialized as well.
+        def __init__(self, pin:  int) -> None:
+            _validate_gpio_pin_number(pin, "pin")
 
-        for currentPin in self._pins:
-            GPIO.setup(currentPin, GPIO.OUT, initial = GPIO.LOW)
+            GPIO.setup(pin, GPIO.OUT, initial = GPIO.LOW)
 
-        self._PWMRed   = GPIO.PWM(pinRed,   self._PWMFrequency)
-        self._PWMGreen = GPIO.PWM(pinGreen, self._PWMFrequency)
-        self._PWMBlue  = GPIO.PWM(pinBlue,  self._PWMFrequency)
+            self._controller = GPIO.PWM(pin, self._PWM_FREQUENCY)
+            self._controller.start(0)
 
-        self._PWMRed.start(0)
-        self._PWMGreen.start(0)
-        self._PWMBlue.start(0)
+        # --------------------------------------------------------------
 
-    # ------------------------------------------------------------------
+        def set_colour(self, new_colour:  int) -> None:
+            self._controller.ChangeDutyCycle((new_colour * 100) / 255)
 
-    def setColor(self, color):
-    # This method sets the color of the RGB LED.
-    #
-    # "color" must be a 24-bit RGB integer.
+    def __init__(self, pin_red:  int, pin_green:  int, pin_blue:  int) -> None:
+        """
+        Prepare an RGB LED for use.
+        """
 
-        # First, the three primary colors are extracted from "color".  Next, each pin's PWM
-        # duty cycle is set to its corresponding primary color.
-        #
-        # Note that the range for the duty cycle is from 0 to 100, so some scaling is
-        # necessary.
-
-        redValue   = (color & 0xff0000) >> 16
-        greenValue = (color & 0x00ff00) >> 8
-        blueValue  = (color & 0x0000ff)
-
-        self._PWMRed.ChangeDutyCycle((redValue * 100) / 255)
-        self._PWMGreen.ChangeDutyCycle((greenValue * 100) / 255)
-        self._PWMBlue.ChangeDutyCycle((blueValue * 100) / 255)
+        self._red   = self._Emitter(pin_red)
+        self._green = self._Emitter(pin_green)
+        self._blue  = self._Emitter(pin_blue)
 
     # ------------------------------------------------------------------
 
-    def off(self):
-    # This method turns off the RGB LED.
+    def set_color(self, colour:  int) -> None:
+        """
+        Set the color of the RGB LED.
 
-        for i in self._pins:
-            GPIO.output(i, GPIO.LOW)
+        "color" must be a 24-bit RGB integer.
+        """
+
+        self._red.set_colour((colour & 0xff0000) >> 16)
+        self._green.set_colour((colour & 0x00ff00) >> 8)
+        self._blue.set_colour(colour & 0x0000ff)
+
+    # ------------------------------------------------------------------
+
+    def off(self) -> None:
+        """
+        Turn off the RGB LED.
+        """
+
+        # Code re-use at its finest.
+
+        self.set_color(0x000000)
 
 # ======================================================================
 # PORT CLASS DEFINITION

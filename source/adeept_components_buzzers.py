@@ -140,9 +140,9 @@ class BuzzerPassive(Buzzer):
     A GPIO data pin doesn't have enough power on its own to drive a
     passive buzzer -- therefore, it must be connected to a transister
     that's also connected to a +3.3V or +5V pin.  The buzzer can then be
-    turned on by using PWM on the data pin and turned off by stopping
-    PWM (a square PWM wave is the closest that the GPIO can come to an
-    alternating current).
+    turned on by using pulse-width modulation on the data pin and turned
+    off by stopping pulse-width modulation (a square PWM wave is the
+    closest that the GPIO can come to an alternating current).
 
     Parameters
     ----------
@@ -169,9 +169,9 @@ class BuzzerPassive(Buzzer):
     # Class Constants
     # ---------------
     # _PWM_DUTY_CYCLE:  int
-    #     The PWM duty cycle to use when making the buzzer buzz.  It
-    #     should be a square wave otherwise the buzzer may sound weak
-    #     or strange and burn out prematurely.
+    #     The pulse-width modulation duty cycle to use when making the
+    #     buzzer buzz.  It should be a square wave otherwise the buzzer
+    #     may sound weak or strange and burn out prematurely.
     #
     # Instance Variables
     # ------------------
@@ -179,8 +179,8 @@ class BuzzerPassive(Buzzer):
     #     The frequency that the buzzer is currently buzzing at (in
     #     hertz).
     # _controller:  Union[RPi.GPIO.PWM, None]
-    #     The PWM contoller for the buzzer (used to change the buzzer's
-    #     frequency), if any.
+    #     The pulse-width modulation contoller for the buzzer (used to
+    #     change the buzzer's frequency), if any.
     #
     # Class Invariants
     # ----------------
@@ -233,10 +233,10 @@ class BuzzerPassive(Buzzer):
         assert (self._controller is not None) or (self._frequency == 0)
 
         # If "new_frequency" is 0 then silence the buzzer by stopping
-        # PWM (if the PWM controller exists) -- otherwise, set the
-        # buzzer's frequency to "new_frequency" (creating a PWM
-        # controller if necessary).  If the buzzer was previously silent
-        # then start PWM.
+        # pulse-width modulation (if the PWM controller exists) --
+        # otherwise, set the buzzer's frequency to "new_frequency"
+        # (creating a PWM controller if necessary).  If the buzzer was
+        # previously silent then start pulse-width modulation.
 
         if new_frequency == 0:
             if self._controller is not None:
