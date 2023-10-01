@@ -153,12 +153,12 @@ class DriveMotor:
     ports.
     """
 
-    # Class Private Properties
+    # Class Private Attributes
     # ------------------------
     # _PWM_FREQUENCY:  int
     #     The PWM frequency to use with the drive motor.
     #
-    # Private Properties
+    # Private Attributes
     # ------------------
     # _ENABLE_PIN:  int
     #     The GPIO pin (output) that connects to the L298 controller's
@@ -341,20 +341,19 @@ class UltrasonicSensor:
     using smoothing algorithms.
     """
 
-    # Class Private Properties
+    # Class Private Attributes
     # ------------------------
     # _TRIGGER_INTERVAL
-    #     The minium interval between calls to `get_distance()`.
-    #
+    #     The minimum interval between calls to `get_distance()`.
     # _TRIGGER_DURATION:  float
-    # Private Properties
-    # ------------------    #
+    #     How long to keep TRIGGER high in order to activate the
+    #     distance finder.
     # _ECHO_TIMEOUT:  float
     #     How long to wait for an echo before giving up.
     # _SPEED_OF_SOUND:  float
     #     The speed of sound in metres per second at 20°C.
     #
-    # Private Properties
+    # Private Attributes
     # ------------------
     # _TRIGGER_PIN:  int
     #     The GPIO pin (output) that's connected to TRIGGER.
@@ -525,7 +524,7 @@ class NeoPixelStrip(Adafruit_NeoPixel):
     (for C++) is a good place to start.
     """
 
-    # Class Private Properties
+    # Class Private Attributes
     # ------------------------
     # _DMA:  int
     #     The DMA channel to use (DMA is why superuser privileges are
@@ -750,9 +749,9 @@ class RGB_LED:
     Connect the RGB LED to either the "RGB1" or "RGB2" port on the
     Adeept HAT.
 
-    An RGB LED uses three GPIO pins -- one for each of its primary
-    colour emitters.  The brightness of each emitter is controlled
-    through pulse-width modulation.
+    An RGB LED uses three GPIO pins -- one for each of its
+    primary-colour emitters.  The brightness of each emitter is
+    controlled through pulse-width modulation.
 
     Parameters
     ----------
@@ -767,10 +766,47 @@ class RGB_LED:
         At least one of the arguments isn't a valid GPIO BCM pin.
     """
 
+    # Private Attributes
+    # ------------------
+    # _red:    _Emitter
+    # _green:  _Emitter
+    # _blue:   _Emitter
+    #     Controllers for each of the RGB LED's coloured emitters.
+
     class _Emitter:
-        _PWM_FREQUENCY:  int = 240  # PWM frequency that the RGB LED operates at
+        """
+        Control a single emitter in an RGB LED
+
+        Parameters
+        ----------
+        pin:  int
+            The GPIO pin (output) for the eitter.
+
+        Raises
+        ------
+        ValueError
+            `pin` isn't a valid GPIO BCM pin.
+        """
+
+        # Class Attributes
+        # ----------------
+        # _PWM_FREQUENCY:  int
+        #     The frequency (in hertz) that pulse-width modulation is to
+        #     operate at.  Its value is high enough to not be noticeable
+        #     by the human eye.
+        #
+        # Private Attributes
+        # ------------------
+        # _controller:  GPIO.PWM
+        #     Pulse-width modulator controller for the emitter.
+
+        _PWM_FREQUENCY:  int = 240  #
 
         def __init__(self, pin:  int) -> None:
+            """
+            Prepare an RGB LED for use.
+            """
+
             _validate_gpio_pin_number(pin, "pin")
 
             GPIO.setup(pin, GPIO.OUT, initial = GPIO.LOW)
@@ -780,8 +816,23 @@ class RGB_LED:
 
         # --------------------------------------------------------------
 
-        def set_colour(self, new_colour:  int) -> None:
-            self._controller.ChangeDutyCycle((new_colour * 100) / 255)
+        def set_brightness(self, brightness:  int) -> None:
+            """
+            Change the emitter's brightness.
+
+            Parameters
+            ----------
+            brightness:  int
+                The intensity of the LED's emitter (must be an integer
+                from 0x00 to 0xFF)
+            """
+
+            assert (brightness >= 0x00) and (brightness <= 0xFF)
+
+            # The brightness is scaled to the range of the pulse-width
+            # modulator's duty cycle (0% to 100%).
+
+            self._controller.ChangeDutyCycle((brightness * 100) / 0xFF)
 
     def __init__(self, pin_red:  int, pin_green:  int, pin_blue:  int) -> None:
         """
@@ -794,16 +845,31 @@ class RGB_LED:
 
     # ------------------------------------------------------------------
 
-    def set_color(self, colour:  int) -> None:
+    def set_colour(self, colour:  int) -> None:
         """
-        Set the color of the RGB LED.
+        Set the colour of the RGB LED.
 
-        "color" must be a 24-bit RGB integer.
+        Parameters
+        ----------
+        colour:  int
+            The new colour for the RGB LED (must be a 24-bit RGB
+            integer).
+
+        Raises
+        ------
+        ValueError
+            `colour` is outside the range of 0x00000000 to 0x00FFFFFF.
         """
 
-        self._red.set_colour((colour & 0xff0000) >> 16)
-        self._green.set_colour((colour & 0x00ff00) >> 8)
-        self._blue.set_colour(colour & 0x0000ff)
+        if (colour < 0x00000000) or (colour > 0x00FFFFFF):
+            raise ValueError("\"colour\" ("
+                             + (f"0x{colour:X}" if colour >= 0
+                                else f"-0x{-colour:X}")
+                             + ") is not a 24-bit RGB integer")
+
+        self._red.set_brightness((colour & 0x00FF0000) >> 16)
+        self._green.set_brightness((colour & 0x0000FF00) >> 8)
+        self._blue.set_brightness(colour & 0x000000FF)
 
     # ------------------------------------------------------------------
 
@@ -814,7 +880,7 @@ class RGB_LED:
 
         # Code re-use at its finest.
 
-        self.set_color(0x000000)
+        self.set_colour(0x000000)
 
 # ======================================================================
 # PORT CLASS DEFINITION
