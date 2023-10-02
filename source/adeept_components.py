@@ -746,8 +746,8 @@ class RGB_LED:
     """
     Control an RGB LED (not to be confused with a NeoPixel).
 
-    Connect the RGB LED to either the "RGB1" or "RGB2" port on the
-    Adeept HAT.
+    Connect the RGB LED (MUST be of the anode variety) to either the
+    "RGB1" or "RGB2" port on the Adeept HAT.
 
     An RGB LED uses three GPIO pins -- one for each of its
     primary-colour emitters.  The brightness of each emitter is
@@ -780,7 +780,7 @@ class RGB_LED:
         Parameters
         ----------
         pin:  int
-            The GPIO pin (output) for the eitter.
+            The GPIO pin (output) for the emitter.
 
         Raises
         ------
@@ -800,7 +800,7 @@ class RGB_LED:
         # _controller:  GPIO.PWM
         #     Pulse-width modulator controller for the emitter.
 
-        _PWM_FREQUENCY:  int = 240  #
+        _PWM_FREQUENCY:  int = 240
 
         def __init__(self, pin:  int) -> None:
             """
@@ -887,37 +887,88 @@ class RGB_LED:
 # ======================================================================
 
 class Port():
-# This class is an interface for a switch port.
-#
-# A port can be switched on and off.  Its most commonly conected
-# component is an LED lamp, but it can turn other things on and off as
-# well.
-#
-# Connect the LED lamp to either the "Port1", "Port2" or "Port3" ports on the Adeept Motor HAT.
-# Do not ask why those ports are labelled like that, or else you may attract the attention of
-# the Thought Police.  You've been warned.
+    """
+    This class is an interface for a switch port.
 
-    def __init__(self, controlPin):
-    # This constructor sets up an LED lamp for use.
-    #
-    # "portID" must be an integer from 1 to 3 and determines the port on the HAT to control.
+    Connect the component to either the "Port1", "Port2" or "Port3"
+    ports on the Adeept HAT.  Do not ask why those ports are labelled
+    this way or you may attract the attention of the Thought Police.
+    You've been warned.
 
-        # The GPIO pin that powers the LED lamp is cross-referenced from the port number.
+    A port can be switched on and off.  The most commonly conected
+    component is an LED lamp, but other components can be connected as
+    well.
 
-        self._controlPin = controlPin
+    Parameters
+    ----------
+    control_pin:  int
+        The GPIO pin (output) that turns the port on and off.
 
-        GPIO.setup(self._controlPin, GPIO.OUT, initial = GPIO.LOW)
+    Attributes
+    ----------
+    state
+
+    Raises
+    ------
+    ValueError
+        `control_pin` isn't a valid GPIO BCM pin.
+    """
+
+    # Private Attributes
+    # ------------------
+    # _control_pin:  int
+    #     The GPIO pin (output) that turns the port on and off.
+    # _state:  bool
+    #     The current state of the port (True means on, False means off)
+
+    def __init__(self, control_pin:  int) -> None:
+        """
+        Prepare a switch port for use.
+        """
+
+        self._CONTROL_PIN:  int  = control_pin
+        self._state:        bool = False
+
+        GPIO.setup(self._CONTROL_PIN, GPIO.OUT, initial = GPIO.LOW)
 
     # ------------------------------------------------------------------
 
-    def on(self):
-    # This method turns the LED lamp on.
+    def turn_on(self) -> None:
+        """
+        Turn the port on.
+        """
 
-        GPIO.output(self._controlPin, GPIO.HIGH)
+        GPIO.output(self._CONTROL_PIN, GPIO.HIGH)
+
+        self._state = True
 
     # ------------------------------------------------------------------
 
-    def off(self):
-    # This method turns the LED lamp off.
+    def turn_off(self) -> None:
+        """
+        Turn the port off.
+        """
 
-        GPIO.output(self._controlPin, GPIO.LOW)
+        GPIO.output(self._CONTROL_PIN, GPIO.LOW)
+
+        self._state = False
+
+    # ------------------------------------------------------------------
+
+    def _set_state(self, new_state:  bool) -> None:
+        """
+        Set a new state for the port.
+
+        Parameters
+        ----------
+        new_state:  bool
+            The port's new state (True means on, False means off).
+        """
+
+        if new_state:
+            self.turn_on()
+        else:
+            self.turn_off()
+
+    state = property(lambda self:  self._state, _set_state, None,
+                     "The state of the port (True means on, False means off)")
