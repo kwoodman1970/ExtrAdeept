@@ -746,8 +746,9 @@ class RGB_LED:
     """
     Control an RGB LED (not to be confused with a NeoPixel).
 
-    Connect the RGB LED (MUST be of the anode variety) to either the
-    "RGB1" or "RGB2" port on the Adeept HAT.
+    Connect the RGB LED (MUST be of the anode variety -- the cathode
+    variety will not work) to either the "RGB1" or "RGB2" port on the
+    Adeept HAT.
 
     An RGB LED uses three GPIO pins -- one for each of its
     primary-colour emitters.  The brightness of each emitter is
@@ -775,7 +776,7 @@ class RGB_LED:
 
     class _Emitter:
         """
-        Control a single emitter in an RGB LED
+        Control a single emitter in an RGB LED.
 
         Parameters
         ----------
@@ -799,6 +800,19 @@ class RGB_LED:
         # ------------------
         # _controller:  GPIO.PWM
         #     Pulse-width modulator controller for the emitter.
+        #
+        # Notes
+        # -----
+        # The RGB ports on the HAT have a +3.3V pin instead of a ground
+        # pin (which is why only anode RGB LED's are compatible) and
+        # brightness is controlled by the GPIO pin pushing back
+        # against the power pin.  In other words, the GPIO pin acts
+        # like a brake pedal instead of an accelerator pedal --
+        # increased pressure causes decreased activity.
+        #
+        # Thus, a high signal on the GPIO pin will darken the emitter
+        # and a low signal will brighten it.  This principle also
+        # applies to pulse-width modulation.
 
         _PWM_FREQUENCY:  int = 240
 
@@ -809,10 +823,10 @@ class RGB_LED:
 
             _validate_gpio_pin_number(pin, "pin")
 
-            GPIO.setup(pin, GPIO.OUT, initial = GPIO.LOW)
+            GPIO.setup(pin, GPIO.OUT, initial = GPIO.HIGH)
 
             self._controller = GPIO.PWM(pin, self._PWM_FREQUENCY)
-            self._controller.start(0)
+            self._controller.start(100)
 
         # --------------------------------------------------------------
 
@@ -830,9 +844,11 @@ class RGB_LED:
             assert (brightness >= 0x00) and (brightness <= 0xFF)
 
             # The brightness is scaled to the range of the pulse-width
-            # modulator's duty cycle (0% to 100%).
+            # modulator's duty cycle (0% to 100%).  Also, the duty cycle
+            # scales inversely with brightness.
 
-            self._controller.ChangeDutyCycle((brightness * 100) / 0xFF)
+            self._controller.ChangeDutyCycle(100
+                                             - round((brightness * 100) / 0xFF))
 
     def __init__(self, pin_red:  int, pin_green:  int, pin_blue:  int) -> None:
         """
@@ -888,14 +904,14 @@ class RGB_LED:
 
 class Port():
     """
-    This class is an interface for a switch port.
+    Control a switch port.
 
     Connect the component to either the "Port1", "Port2" or "Port3"
     ports on the Adeept HAT.  Do not ask why those ports are labelled
     this way or you may attract the attention of the Thought Police.
     You've been warned.
 
-    A port can be switched on and off.  The most commonly conected
+    A port can be switched on and off.  The most commonly connected
     component is an LED lamp, but other components can be connected as
     well.
 
@@ -916,7 +932,7 @@ class Port():
 
     # Private Attributes
     # ------------------
-    # _control_pin:  int
+    # _CONTROL_PIN:  int
     #     The GPIO pin (output) that turns the port on and off.
     # _state:  bool
     #     The current state of the port (True means on, False means off)
@@ -926,6 +942,8 @@ class Port():
         Prepare a switch port for use.
         """
 
+        _validate_gpio_pin_number(control_pin, "control_pin")
+
         self._CONTROL_PIN:  int  = control_pin
         self._state:        bool = False
 
@@ -933,29 +951,7 @@ class Port():
 
     # ------------------------------------------------------------------
 
-    def turn_on(self) -> None:
-        """
-        Turn the port on.
-        """
-
-        GPIO.output(self._CONTROL_PIN, GPIO.HIGH)
-
-        self._state = True
-
-    # ------------------------------------------------------------------
-
-    def turn_off(self) -> None:
-        """
-        Turn the port off.
-        """
-
-        GPIO.output(self._CONTROL_PIN, GPIO.LOW)
-
-        self._state = False
-
-    # ------------------------------------------------------------------
-
-    def _set_state(self, new_state:  bool) -> None:
+    def set_state(self, new_state:  bool) -> None:
         """
         Set a new state for the port.
 
@@ -965,10 +961,11 @@ class Port():
             The port's new state (True means on, False means off).
         """
 
-        if new_state:
-            self.turn_on()
-        else:
-            self.turn_off()
+        GPIO.output(self._CONTROL_PIN, GPIO.HIGH if new_state else GPIO.LOW)
 
-    state = property(lambda self:  self._state, _set_state, None,
+        self._state = new_state
+
+    # ------------------------------------------------------------------
+
+    state = property(lambda self:  self._state, set_state, None,
                      "The state of the port (True means on, False means off)")
