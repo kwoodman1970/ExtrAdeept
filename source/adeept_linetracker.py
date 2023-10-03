@@ -39,7 +39,7 @@ class LineTracker():
     CALLBACK_TYPE = Callable[[bool, bool, bool], None]
 
     def __init__(self, pin_left:  int, pin_middle:  int, pin_right:  int,
-                 line_is_white:  bool = False) -> None:
+                 line_is_black:  bool = True) -> None:
         """
         Manage an infrared sensor.
         """
@@ -48,13 +48,7 @@ class LineTracker():
         self._PIN_MIDDLE: IRSensor = IRSensor(pin_middle, self._on_change)
         self._PIN_RIGHT:  IRSensor = IRSensor(pin_right, self._on_change)
 
-        if line_is_white is True:
-            self._detection_state = GPIO.LOW
-        elif line_is_white is False:
-            self._detection_state = GPIO.HIGH
-        else:
-            raise ValueError(f"line_is_white ({line_is_white}) must be either "
-                             f"True or False.")
+        self._detection_state:  bool = line_is_black
 
         self._callbacks:  List[Callable[[bool, bool, bool], None]] = []
 
@@ -65,7 +59,7 @@ class LineTracker():
         Sets the module to track a white line on a black background.
         """
 
-        self._detection_state = GPIO.LOW
+        self._detection_state = False
 
     # ------------------------------------------------------------------
 
@@ -74,49 +68,7 @@ class LineTracker():
         Sets the module to track a black line on a white background.
         """
 
-        self._detection_state = GPIO.HIGH
-
-    # ------------------------------------------------------------------
-
-    @property
-    def left(self) -> bool:
-        """
-        Get the state of the left IR sensor.
-
-        Returns
-        -------
-        True if a line was detected, False if otherwise.
-        """
-
-        return self._PIN_LEFT.state == self._detection_state
-
-    # ------------------------------------------------------------------
-
-    @property
-    def middle(self) -> bool:
-        """
-        Get the state of the middle IR sensor.
-
-        Returns
-        -------
-        True if a line was detected, False if otherwise.
-        """
-
-        return self._PIN_MIDDLE.state == self._detection_state
-
-    # ------------------------------------------------------------------
-
-    @property
-    def right(self) -> bool:
-        """
-        Get the state of the right IR sensor.
-
-        Returns
-        -------
-        True if a line was detected, False if otherwise.
-        """
-
-        return self._PIN_RIGHT.state == self._detection_state
+        self._detection_state = True
 
     # ------------------------------------------------------------------
 
@@ -162,3 +114,17 @@ class LineTracker():
     def _on_change(self) -> None:
         for listener in self._callbacks:
             listener(self.left, self.middle, self.right)
+
+    # ------------------------------------------------------------------
+
+    left   = property(lambda self:
+                      self._PIN_LEFT.state == self._detection_state, None,
+                      None, "Line detected on left sensor?")
+
+    middle = property(lambda self:
+                      self._PIN_MIDDLE.state == self._detection_state, None,
+                      None, "Line detected on middle sensor?")
+
+    right  = property(lambda self:
+                      self._PIN_RIGHT.state == self._detection_state, None,
+                      None, "Line detected on right sensor?")

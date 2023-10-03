@@ -678,7 +678,7 @@ class IRSensor():
 
     Attributes
     ----------
-    state
+    state:  bool
 
     See Also
     --------
@@ -708,19 +708,6 @@ class IRSensor():
         GPIO.add_event_detect(pin, GPIO.BOTH)
         GPIO.add_event_callback(pin, self._on_change)
 
-    @property
-    def state(self) -> int:
-        """
-        Return the current state of the infrared sensor.
-
-        Returns
-        -------
-        GPIO.LOW (white surface detected) or GPIO.HIGH (black surface
-        detected).
-        """
-
-        return self._state
-
     def _on_change(self, pin:  int) -> None:
         # Event handler for when the infrared sensor changes state.
         #
@@ -737,6 +724,11 @@ class IRSensor():
 
         if self._ON_CHANGE_ANY is not None:
             self._ON_CHANGE_ANY()
+
+    state = property(lambda self:  self._state == GPIO.HIGH, None, None,
+                     "The current state of the infrared sensor (True means "
+                     "black surface detected, False means white surface "
+                     "detected).")
 
 # ======================================================================
 # RGB_LED CLASS DEFINITION
@@ -760,6 +752,10 @@ class RGB_LED:
     green_pin:  int
     blue_pin:   int
         The GPIO pins (output) for each of the three primary colours.
+
+    Attributes
+    ----------
+    colour:  int
 
     Raises
     ------
@@ -845,7 +841,7 @@ class RGB_LED:
 
             # The brightness is scaled to the range of the pulse-width
             # modulator's duty cycle (0% to 100%).  Also, the duty cycle
-            # scales inversely with brightness.
+            # scales inversely -- not directly -- with brightness.
 
             self._controller.ChangeDutyCycle(100
                                              - round((brightness * 100) / 0xFF))
@@ -855,9 +851,10 @@ class RGB_LED:
         Prepare an RGB LED for use.
         """
 
-        self._red   = self._Emitter(pin_red)
-        self._green = self._Emitter(pin_green)
-        self._blue  = self._Emitter(pin_blue)
+        self._red    = self._Emitter(pin_red)
+        self._green  = self._Emitter(pin_green)
+        self._blue   = self._Emitter(pin_blue)
+        self._colour = 0x00000000
 
     # ------------------------------------------------------------------
 
@@ -887,6 +884,8 @@ class RGB_LED:
         self._green.set_brightness((colour & 0x0000FF00) >> 8)
         self._blue.set_brightness(colour & 0x000000FF)
 
+        self._colour = colour
+
     # ------------------------------------------------------------------
 
     def off(self) -> None:
@@ -897,6 +896,11 @@ class RGB_LED:
         # Code re-use at its finest.
 
         self.set_colour(0x000000)
+
+    # ------------------------------------------------------------------
+
+    colour = property(lambda self:  self._colour, set_colour, None,
+                      "The colour of the RGB LED.")
 
 # ======================================================================
 # PORT CLASS DEFINITION
@@ -922,7 +926,7 @@ class Port():
 
     Attributes
     ----------
-    state
+    state:  bool
 
     Raises
     ------
