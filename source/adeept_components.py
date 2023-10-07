@@ -693,8 +693,6 @@ class IRSensor():
 
     # Private Attributes
     # ------------------
-    # _PIN:  int
-    #     The GPIO pin for reading the sensor.
     # _callbacks:  List[Callable[[bool], None]]
     #     A list of callback functions to call when the sensor changes
     #     state.
@@ -711,15 +709,14 @@ class IRSensor():
 
         GPIO.setup(pin, GPIO.IN)
 
-        self._PIN:        int                          = pin
-        self._callbacks:  List[Callable[[bool], None]] = []
-        self._state:      int                          = GPIO.input(pin)
+        self._state:      int                               = GPIO.input(pin)
+        self._callbacks:  List[Callable[[int, bool], None]] = []
 
         GPIO.add_event_detect(pin, GPIO.BOTH, callback = self._on_change)
 
     # ------------------------------------------------------------------
 
-    def add_callback(self, callback:  Callable[[bool], None]) -> bool:
+    def add_callback(self, callback:  Callable[[int, bool], None]) -> bool:
         """
         Add a callback function for when the sensor's state changes.
 
@@ -729,10 +726,15 @@ class IRSensor():
 
         Parameters
         ----------
-        callback:  Callable[[bool], None]
-            The callback function to call.  It accepts one argument:
-            True if black is now detected or False if it isn't now
-            detected.
+        callback:  Callable[[int, bool], None]
+            The callback function to call.  It must accept the
+            following arguments:
+
+            pin:  int
+                The sensor's GPIO pin.
+            sensing_black:  bool
+                True if black is now detected or False if it isn't now
+                detected.
 
         Returns
         -------
@@ -765,10 +767,15 @@ class IRSensor():
 
         Parameters
         ----------
-        callback:  Callable[[bool], None]
-            The callback function to call.  It accepts one argument:
-            True if black is now detected or False if it isn't now
-            detected.
+        callback:  Callable[[int, bool], None]
+            The callback function to call.  It must accept the
+            following arguments:
+
+            pin:  int
+                The sensor's GPIO pin.
+            sensing_black:  bool
+                True if black is now detected or False if it isn't now
+                detected.
 
         Raises
         ------
@@ -794,17 +801,13 @@ class IRSensor():
         Parameters
         ----------
         pin:  int
-            The GPIO pin (input) whose state has changed (should be the
-            same as pin passed to the constructor).
+            The GPIO pin (input) whose state has changed.
         """
 
-        assert pin == self._PIN, \
-               f"pin {pin} is not the same as self._PIN {self._PIN}"
-
-        self._state = GPIO.input(self._PIN)
+        self._state = GPIO.input(pin)
 
         for callback in self._callbacks:
-            callback(self._state)
+            callback(pin, self._state)
 
     # ------------------------------------------------------------------
 
