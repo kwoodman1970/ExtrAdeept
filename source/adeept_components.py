@@ -660,8 +660,8 @@ class IRSensor():
     Adeept HAT.
 
     The line-tracking module has three infrared emitters & sensors on
-    it.  Each sensor is connected to a pin on the GPIO.  A white surface
-    will set the pin LOW; a black surface will set the pin HIGH.
+    it.  Each sensor is connected to a pin on the GPIO.  A black surface
+    will set the pin HIGH; a white surface will set the pin LOW.
 
     Sensitivity can be adjusted by turning the on-board potentiometer
     with a Phillips screwdriver.
@@ -669,16 +669,16 @@ class IRSensor():
     Parameters
     ----------
     pin:  int
-        The GPIO pin (input) that's connected to the infrared
-        sensor.
-
-    on_change_any:  Optional[Callable[[], None]]
-        Event handler for when any of the infrared sensors changes
-        state.
+        The GPIO pin (input) that's connected to the infrared sensor.
 
     Attributes
     ----------
-    state:  bool
+    sensing_black:  bool
+
+    Raises
+    ------
+    ValueError
+        `pin` isn't a valid GPIO BCM pin.
 
     See Also
     --------
@@ -691,8 +691,18 @@ class IRSensor():
     purposes other than tracking lines.
     """
 
-    def __init__(self, pin:  int,
-                 on_change_any:  Optional[Callable[[], None]]) -> None:
+    # Private Attributes
+    # ------------------
+    # _PIN:  int
+    #     The GPIO pin for reading the sensor.
+    # _callbacks:  List[Callable[[bool], None]]
+    #     A list of callback functions to call when the sensor changes
+    #     state.
+    # _state:  int
+    #     The current state of the sensor (GPIO.HIGH means black is
+    #     detected, GPIO.LOW means that it isn't).
+
+    def __init__(self, pin:  int) -> None:
         """
         Prepare an infrared sensor for use.
         """
@@ -701,34 +711,106 @@ class IRSensor():
 
         GPIO.setup(pin, GPIO.IN)
 
-        self._PIN:            int                          = pin
-        self._ON_CHANGE_ANY:  Optional[Callable[[], None]] = on_change_any
-        self._state:          int                          = GPIO.input(pin)
+        self._PIN:        int                          = pin
+        self._callbacks:  List[Callable[[bool], None]] = []
+        self._state:      int                          = GPIO.input(pin)
 
-        GPIO.add_event_detect(pin, GPIO.BOTH)
-        GPIO.add_event_callback(pin, self._on_change)
+        GPIO.add_event_detect(pin, GPIO.BOTH, callback = self._on_change)
+
+    # ------------------------------------------------------------------
+
+    def add_callback(self, callback:  Callable[[bool], None]) -> bool:
+        """
+        Add a callback function for when the sensor's state changes.
+
+        All callbacks will be called from a separate thread and will be
+        called consecutively (not concurrently) in the order in which
+        they were added.
+
+        Parameters
+        ----------
+        callback:  Callable[[bool], None]
+            The callback function to call.  It accepts one argument:
+            True if black is now detected or False if it isn't now
+            detected.
+
+        Returns
+        -------
+        True if black is currently detected or False if it isn't.  This
+        could be useful if the caller needs to perform any
+        initializations based on the sensor's current state.
+
+        Raises
+        ------
+        ValueError
+            `callback` has already been added.
+
+        See Also
+        --------
+        remove_callback
+        """
+
+        if callback in self._callbacks:
+            raise ValueError("\"callback\" has already been added.")
+
+        self._callbacks.append(callback)
+
+        return self._state
+
+    # ------------------------------------------------------------------
+
+    def remove_callback(self, callback:  Callable[[bool], None]) -> None:
+        """
+        Remove a callback function for when the sensor's state changes.
+
+        Parameters
+        ----------
+        callback:  Callable[[bool], None]
+            The callback function to call.  It accepts one argument:
+            True if black is now detected or False if it isn't now
+            detected.
+
+        Raises
+        ------
+        ValueError
+            `callback` hasn't been added.
+
+        See Also
+        --------
+        add_callback
+        """
+
+        try:
+            self._callbacks.remove(callback)
+        except ValueError:
+            pass
+
+    # ------------------------------------------------------------------
 
     def _on_change(self, pin:  int) -> None:
-        # Event handler for when the infrared sensor changes state.
-        #
-        # Parameters
-        # ----------
-        # pin:  int
-        #     The GPIO pin (input) whose state has changed (should be
-        #     the same as pin passed to the constructor).
+        """
+        Event handler for when the infrared sensor changes state.
+
+        Parameters
+        ----------
+        pin:  int
+            The GPIO pin (input) whose state has changed (should be the
+            same as pin passed to the constructor).
+        """
 
         assert pin == self._PIN, \
                f"pin {pin} is not the same as self._PIN {self._PIN}"
 
         self._state = GPIO.input(self._PIN)
 
-        if self._ON_CHANGE_ANY is not None:
-            self._ON_CHANGE_ANY()
+        for callback in self._callbacks:
+            callback(self._state)
 
-    state = property(lambda self:  self._state == GPIO.HIGH, None, None,
-                     "The current state of the infrared sensor (True means "
-                     "black surface detected, False means white surface "
-                     "detected).")
+    # ------------------------------------------------------------------
+
+    sensing_black = property(lambda self:  self._state == GPIO.HIGH, None,
+                             None, "Is the infrared sensor detecting a black "
+                             "surface?")
 
 # ======================================================================
 # RGB_LED CLASS DEFINITION
@@ -785,8 +867,8 @@ class RGB_LED:
             `pin` isn't a valid GPIO BCM pin.
         """
 
-        # Class Attributes
-        # ----------------
+        # Class Private Attributes
+        # ------------------------
         # _PWM_FREQUENCY:  int
         #     The frequency (in hertz) that pulse-width modulation is to
         #     operate at.  Its value is high enough to not be noticeable
@@ -845,6 +927,8 @@ class RGB_LED:
 
             self._controller.ChangeDutyCycle(100
                                              - round((brightness * 100) / 0xFF))
+
+    # ------------------------------------------------------------------
 
     def __init__(self, pin_red:  int, pin_green:  int, pin_blue:  int) -> None:
         """
