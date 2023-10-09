@@ -15,7 +15,28 @@ import math
 from typing import List, Optional
 
 from rpi_ws281x import Adafruit_NeoPixel
-from _rpi_ws281x import WS2812_STRIP, WS2811_TARGET_FREQ
+
+# ======================================================================
+# MODULE SUBROUTINES
+# ======================================================================
+
+def _build_args(dictionary:  dict, value_name:  str, value:  any) -> None:
+    """
+    Add a name-value pair to a dictionary if the value isn't None.
+
+    Parameters
+    ----------
+    args:  dict
+        The dictionary of name-value pairs that the name-value pair will
+        be added to if the value isn't None.
+    value_name:  str
+        The name of the name-value pair.
+    value:  any
+        The value of the name-value pair.
+    """
+
+    if value is not None:
+        dictionary[value_name] = value
 
 # ======================================================================
 # NEOPIXEL STRIP CLASS DEFINITION
@@ -35,18 +56,18 @@ class NeoPixelStrip(Adafruit_NeoPixel):
 
     Parameters
     ----------
-    numPixels:  int
+    num:  int
         The number of NeoPixels in the strip (must be greater than
         zero).
-    data_pin:  int
+    pin:  int
         The GPIO pin (output) that connects to the first NeoPixel's DI
         connection.
     strip_type:  int (optional)
         The type of NeoPixels being used.  Use an `appropriate constant
-        from _rpi_ws281x
+        imported from _rpi_ws281x
         <https://github.com/jgarff/rpi_ws281x/blob/master/ws2811.h#L46>`_
-        (such as `WS2811_STRIP_GRB` or `ws.WS2812_STRIP`).  The default
-        value is `WS2812_STRIP`.
+        (such as `SK6812_STRIP_RGBW`, `WS2811_STRIP_GRB` or
+        `WS2812_STRIP`).  The default value is `WS2812_STRIP`.
 
     Other Parameters
     ----------------
@@ -54,6 +75,8 @@ class NeoPixelStrip(Adafruit_NeoPixel):
         The frequency of the display signal (in hertz).
     dma:  int (optional)
         The DMA channel to use.
+    invert:  bool (optional)
+        Invert the signal line?
     brightness:  int (optional)
         A scale factor for the brightness of each LED in the strip (0 is
         the darkest; 255 is the brightest).
@@ -84,43 +107,38 @@ class NeoPixelStrip(Adafruit_NeoPixel):
     (for C++) is a good place to start.
     """
 
-    # Class Private Attributes
-    # ------------------------
-    # _DMA:  int
-    #     The DMA channel to use (DMA is why superuser privileges are
-    #     required).
-    # _PWM_CHANNEL:  int
-    #     The PWM channnel on the data pin to use.
-    # _BRIGHTNESS:  int
-    #     Scale factor for brightness.
-    # _INVERT:  bool
-    #     Invert the signal line?.
-
-    _DMA_CHANNEL:  int  = 10
-    _PWM_CHANNEL:  int  = 0
-    _BRIGHTNESS:   int  = 255
-    _INVERT:       bool = False
-
     # ------------------------------------------------------------------
 
-    def __init__(self, num_pixels:  int, data_pin:  int,
-                 strip_type:  int = WS2812_STRIP,
-                 freq_hz:  int = WS2811_TARGET_FREQ, dma:  int = _DMA_CHANNEL,
-                 brightness:  int = _BRIGHTNESS, channel:  int = _PWM_CHANNEL,
+    def __init__(self, num:  int, pin:  int, strip_type:  Optional[int] = None,
+                 freq_hz:  Optional[int] = None, dma:  Optional[int] = None,
+                 invert:  Optional[bool] = None,
+                 brightness:  Optional[int] = None,
+                 channel:  Optional[int] = None,
                  gamma:  Optional[List[float]] = None) -> None:
         """
         Prepare the strip of NeoPixels for use.
         """
 
-        if num_pixels <= 0:
-            raise ValueError(f"\"num_pixels\" ({num_pixels}) must be "
-                             f"greater than 0")
+        if num <= 0:
+            raise ValueError(f"\"num\" ({num}) must be greater than 0")
+
+        # Rather than keep track of the default values of the parameters
+        # for the base class's constructor, dynamically build the
+        # arguments list to pass to that constructor.
+
+        args:  dict = {"self":  self, "num":  num, "pin":  pin}
+
+        _build_args(args, "strip_type", strip_type)
+        _build_args(args, "freq_hz", freq_hz)
+        _build_args(args, "dma", dma)
+        _build_args(args, "invert", invert)
+        _build_args(args, "brightness", brightness)
+        _build_args(args, "channel", channel)
+        _build_args(args, "gamma", gamma)
 
         # The base class does most of the heavy lifting.
 
-        Adafruit_NeoPixel.__init__(self, num_pixels, data_pin, freq_hz, dma,
-                                   self._INVERT, brightness, channel,
-                                   strip_type, gamma)
+        Adafruit_NeoPixel.__init__(**args)
         atexit.register(self._neo_pixel_strip_atexit)
 
     # ------------------------------------------------------------------
