@@ -4,6 +4,19 @@ Class for controlling Adeept HAT NeoPixels.
 To use, add the following line to the top of your module:
 
     from adeept_components_neopixelstrip import NeoPixelStrip
+
+Notes
+-----
+`Adafruit_NeoPixel` (the base class for the `NeoPixelStrip` class)
+doesn't follow `PEP8 naming conventions
+<https://www.python.org/dev/peps/pep-0008/>_` -- instead, it uses the
+names that are in the `Adafruit NeoPixel Class Reference
+<https://adafruit.github.io/Adafruit_NeoPixel/html/class_adafruit___neo_pixel.html>`_
+(which is reasonable).
+
+Therefore, the members of `NeoPixelStrip` follow the same naming
+convention -- except that accursed single-letter parameter names are
+changed to more-descriptive names.
 """
 
 # ======================================================================
@@ -11,10 +24,11 @@ To use, add the following line to the top of your module:
 # ======================================================================
 
 import atexit
+from colorsys import hsv_to_rgb
 import math
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
-from rpi_ws281x import Adafruit_NeoPixel
+from rpi_ws281x import Adafruit_NeoPixel, Color
 
 # ======================================================================
 # MODULE SUBROUTINES
@@ -153,7 +167,7 @@ class NeoPixelStrip(Adafruit_NeoPixel):
 
         Parameters
         ----------
-        x:  int
+        angle:  int
             Input angle, 0 to 255; 256 would loop back to zero,
             completing the circle (equivalent to 360 degrees or 2 pi
             radians).  One can therefore use an unsigned 8-bit variable
@@ -169,38 +183,54 @@ class NeoPixelStrip(Adafruit_NeoPixel):
 
         Notes
         -----
-        See `AdaFruit_NeoPixel Class
-        Reference<https://adafruit.github.io/Adafruit_NeoPixel/html/class_adafruit___neo_pixel.html#afb00024000da81bcb6378c7052f77be3>`_.
+        See the `AdaFruit_NeoPixel Class Reference
+        <https://adafruit.github.io/Adafruit_NeoPixel/html/class_adafruit___neo_pixel.html#afb00024000da81bcb6378c7052f77be3>`_.
         """
 
         return round((math.sin((angle % 256) * 2.0 * math.pi / 256.0) + 1.0)
                      * 127.5)
 
+
     # ------------------------------------------------------------------
 
-    def fill(self, color:  int = 0, first:  int = 0, count:  int = 0) -> None:
+    @staticmethod
+    def ColorHSV(hue:  int, sat: int = 255, val:  int = 255) -> Color:
         """
-        Fill all or part of the NeoPixel strip with a color.
+        Convert hue, saturation and value to a packed 32-bit RGB color.
 
-        Changes will not take effect until ".show()" is called.
-
-        This method was added to make the base class more like its C++
-        counterpart.
+        The returned value can be passed to `setPixelColor()` or other
+        RGB-compatible functions.
 
         Parameters
         ----------
-        color:  int (optional)
-            The new color or colors (24-bit RGB or 32-bit WRGB,
-            depending on the model of NeoPixel) to set "pixels" to.  The
-            default value is 0 (black).
-        first:  int (optional)
-            0-based index of the first NeoPixel to change.  It must be
-            from 0 to the number of NeoPixels in the strip minus 1).
-            The default value is 0 (the first NeoPixel).
-        count:  int (optional)
-            The total number of NeoPixels to change.  It must be from 0
-            (meaning all NeoPixels from `count` upward) to the number of
-            NeoPixels in the strip.  The default is 0.
+        hue:  int
+            An unsigned 16-bit value, 0 to 65535, representing one full
+            loop of the color wheel, which allows 16-bit hues to "roll
+            over" while still doing the expected thing (and allowing
+            more precision than the wheel() function that was common to
+            prior NeoPixel examples).
+        sat:  int
+            Saturation, 8-bit value, 0 (min or pure grayscale) to 255
+            (max or pure hue). Default of 255 if unspecified.
+        val:  int
+            Value (brightness), 8-bit value, 0 (min / black / off) to
+            255 (max or full brightness).  Default of 255 if
+            unspecified.
+
+        Returns
+        -------
+        Packed 32-bit RGB with the most significant byte set to 0 -- the
+        white element of WRGB pixels is NOT utilized.
+
+        Result is linearly but not perceptually correct, so you may want
+        to pass the result through the gamma32() function (or your own
+        gamma-correction operation) else colors may appear washed out.
+        This is not done automatically by this function because coders
+        may desire a more refined gamma-correction function than the
+        simplified one-size-fits-all operation of gamma32().
+
+        Diffusing the LEDs also really seems to help when using
+        low-saturation colors.
 
         Raises
         ------
@@ -209,8 +239,72 @@ class NeoPixelStrip(Adafruit_NeoPixel):
 
         Notes
         -----
-        See `AdaFruit_NeoPixel Class
-        Reference<https://adafruit.github.io/Adafruit_NeoPixel/html/class_adafruit___neo_pixel.html#a310844b3e5580056edf52ce3268d8084>`_.
+        See the `AdaFruit_NeoPixel Class Reference
+        <https://adafruit.github.io/Adafruit_NeoPixel/html/class_adafruit___neo_pixel.html#a1f16aee5b96e16e62598f826e292b23b>`_.
+
+        This method uses `colorsys.hsv_to_rgb()` to perform the
+        conversion instead of translating the `ColorHSV` method in the
+        `C++ source file
+        <https://github.com/adafruit/Adafruit_NeoPixel/blob/master/Adafruit_NeoPixel.cpp>`_
+        to Python.
+        """
+
+        # Constants
+        # ---------
+        # RGB_TYPE
+        #     A type hint alias for the result of `hsv_to_rgb()`.
+        #
+        # Variables
+        # ---------
+        # primaries:  RGB_TYPE
+        #     A tuple of red, green and blue values (each value ranging
+        #     from 0.0 to 1.0) converted from hue, saturation and value.
+
+        if (sat < 0) or (sat >  0xFF):
+            raise ValueError(f"\"sat\" (0x{hex(sat)}) out of range "
+                             f"(0x00-0xFF)")
+
+        if (val < 0) or (val >  0xFF):
+            raise ValueError(f"\"v\" (0x{hex(val)}) out of range "
+                             f"(0x00-0xFF)")
+
+        RGB_TYPE = Tuple[float, float, float]
+
+        primaries:  RGB_TYPE = hsv_to_rgb((hue % 0x10000) / 0x10000,
+                                          sat / 0xFF, val / 0xFF)
+
+        return Color(round(primaries[0] * 0xFF), round(primaries[1] * 0xFF),
+                     round(primaries[2] * 0xFF))
+
+    # ------------------------------------------------------------------
+
+    def fill(self, color:  int = 0, first:  int = 0, count:  int = 0) -> None:
+        """
+        Fill all or part of the NeoPixel strip with a color.
+
+        Parameters
+        ----------
+        color:  int (optional)
+            32-bit color value.  Most significant byte is white (for
+            RGBW pixels) or ignored (for RGB pixels), next is red, then
+            green, and least significant byte is blue.  If all arguments
+            are unspecified, this will be 0 (off).
+        first:  int (optional)
+            Index of first pixel to fill, starting from 0.  Must be
+            in-bounds, no clipping is performed.  0 if unspecified.
+        count:  int (optional)
+            Number of pixels to fill, as a positive value.  Passing 0 or
+            leaving unspecified will fill to end of strip.
+
+        Raises
+        ------
+        ValueError
+            One or more arguments are invalid.
+
+        Notes
+        -----
+        See the `AdaFruit_NeoPixel Class Reference
+        <https://adafruit.github.io/Adafruit_NeoPixel/html/class_adafruit___neo_pixel.html#a310844b3e5580056edf52ce3268d8084>`_.
         """
 
         # Constants
@@ -247,8 +341,8 @@ class NeoPixelStrip(Adafruit_NeoPixel):
 
         Notes
         -----
-        See `AdaFruit_NeoPixel Class
-        Reference<https://adafruit.github.io/Adafruit_NeoPixel/html/class_adafruit___neo_pixel.html#ae259682b202be0acd258d6879f4c7121>`_.
+        See the `AdaFruit_NeoPixel Class Reference
+        <https://adafruit.github.io/Adafruit_NeoPixel/html/class_adafruit___neo_pixel.html#ae259682b202be0acd258d6879f4c7121>`_.
         """
 
         self.fill(0x000000)
