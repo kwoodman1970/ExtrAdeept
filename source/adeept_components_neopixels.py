@@ -83,6 +83,13 @@ class NeoPixelStrip(Adafruit_NeoPixel):
         (such as `SK6812_STRIP_RGBW`, `WS2811_STRIP_GRB` or
         `WS2812_STRIP`).  The default value is `WS2812_STRIP`.
 
+    Attributes
+    ----------
+    numLEDs
+    numBytes
+    pin
+    brightness
+
     Other Parameters
     ----------------
     freq_hz:  int (optional)
@@ -121,6 +128,12 @@ class NeoPixelStrip(Adafruit_NeoPixel):
     (for C++) is a good place to start.
     """
 
+    # Private Constants
+    # -----------------
+    # _PIN:  int
+    #     The GPIO pin (output) that connects to the first NeoPixel's
+    #     DI connection.
+
     # ------------------------------------------------------------------
 
     def __init__(self, num:  int, pin:  int, strip_type:  Optional[int] = None,
@@ -135,6 +148,8 @@ class NeoPixelStrip(Adafruit_NeoPixel):
 
         if num <= 0:
             raise ValueError(f"\"num\" ({num}) must be greater than 0")
+
+        self._PIN:  int = pin
 
         # Rather than keep track of the default values of the parameters
         # for the base class's constructor, dynamically build the
@@ -307,30 +322,23 @@ class NeoPixelStrip(Adafruit_NeoPixel):
         <https://adafruit.github.io/Adafruit_NeoPixel/html/class_adafruit___neo_pixel.html#a310844b3e5580056edf52ce3268d8084>`_.
         """
 
-        # Constants
-        # ---------
-        # NUM_NEO_PIXELS:  int
-        #     The number of NeoPixels in the strip.
-
-        NUM_NEO_PIXELS = self.numPixels()
-
         # Validate the parameters.
 
         if (color < 0) or (color >  0xFFFFFFFF):
             raise ValueError(f"\"color\" (0x{hex(color)}) out of "
                              f"range (0-0xFFFFFFFF)")
 
-        if (first < 0) or (first >  NUM_NEO_PIXELS - 1):
+        if (first < 0) or (first >  self.numLEDs - 1):
             raise ValueError(f"\"first\" ({first}) out of range (0-"
-                             f"{NUM_NEO_PIXELS - 1})")
+                             f"{self.numLEDs - 1})")
 
-        if (count < 0) or (count > NUM_NEO_PIXELS - first):
+        if (count < 0) or (count > self.numLEDs - first):
             raise ValueError(f"\"count\" ({count}) out of range (0-"
-                             f"{NUM_NEO_PIXELS - first})")
+                             f"{self.numLEDs - first})")
 
         # Change the requested NeoPixels
 
-        for i in range(first, count if count != 0 else NUM_NEO_PIXELS):
+        for i in range(first, count if count != 0 else self.numLEDs):
             self.setPixelColor(i, color)
 
     # ------------------------------------------------------------------
@@ -383,15 +391,11 @@ class NeoPixelStrip(Adafruit_NeoPixel):
         See the `AdaFruit_NeoPixel Class Reference
         <https://adafruit.github.io/Adafruit_NeoPixel/html/class_adafruit___neo_pixel.html#a914f61b78e4d36a03c91372ceded2d46>`_.
 
-        The `gammify` parameter isn't supported because this class's
-        constructor accepts a gamma table as an argument.
+        The `gammify` parameter isn't supported because gamma tables can
+        be provided to this class's constructor and the `setGamma()`
+        method.
         """
 
-        # Constants
-        # ---------
-        # NUM_NEO_PIXELS:  int
-        #     The number of NeoPixels in the strip.
-        #
         # Variables
         # ---------
         # hue:  int
@@ -399,10 +403,8 @@ class NeoPixelStrip(Adafruit_NeoPixel):
         # color:  int
         #     Calculated RGB color for current NeoPixel in iteration.
 
-        NUM_NEO_PIXELS:  int = self.numPixels()
-
-        for i in range(NUM_NEO_PIXELS):
-            hue:    int = first_hue + (i * reps * 0x10000) // NUM_NEO_PIXELS
+        for i in range(self.numLEDs):
+            hue:    int = first_hue + (i * reps * 0x10000) // self.numLEDs
             color:  int = self.ColorHSV(hue, saturation, brightness)
 
             self.setPixelColor(i, color)
@@ -418,3 +420,23 @@ class NeoPixelStrip(Adafruit_NeoPixel):
 
         self.clear()
         self.show()
+
+    # ------------------------------------------------------------------
+
+    numLEDs = property(Adafruit_NeoPixel.numPixels, None, None,
+                       "Number of RGB LEDs in strip.")
+
+    # ------------------------------------------------------------------
+
+    numBytes = property(Adafruit_NeoPixel.__len__, None, None,
+                        "Size of 'pixels' buffer.")
+
+    # ------------------------------------------------------------------
+
+    pin = property(lambda self:  self._pin, None, None, "Output pin number.")
+
+    # ------------------------------------------------------------------
+
+    brightness = property(Adafruit_NeoPixel.getBrightness,
+                          Adafruit_NeoPixel.setBrightness, None,
+                          "Strip brightness 0-255 (stored as +1).")
