@@ -31,7 +31,7 @@ from typing import List, Optional, Tuple
 from rpi_ws281x import Adafruit_NeoPixel, Color
 
 # ======================================================================
-# MODULE SUBROUTINES
+# PRIVATE SUBROUTINES
 # ======================================================================
 
 def _build_args(dictionary:  dict, value_name:  str, value:  any) -> None:
@@ -343,6 +343,63 @@ class NeoPixelStrip(Adafruit_NeoPixel):
 
     # ------------------------------------------------------------------
 
+    def fillSeries(self, colors:  List[int],
+                   pixels:  Optional[List[int]] = None) -> None:
+        """
+        Set a series of colors for some or all of the NeoPixels.
+
+        Parameters
+        ----------
+        colors:  List[int]
+            The new colour or colours (24-bit RGB or 32-bit WRGB,
+            depending on the model of NeoPixel) to set "pixels" to.
+
+            All of the colors in `colors` are applied to `pixels` in the
+            same order.  If there are fewer colors than pixels then the
+            pattern in `colors` will repeat.
+
+            Colors can't be negative.
+        pixels:  Optional[List[int]] = None
+            A list of NeoPixel indices.  If `None` then all NeoPixels
+            will be changed.
+
+            All elements of `pixels` must be at least 0 and less than
+            the number of NeoPixels in the strip.
+
+        Raises
+        ------
+        ValueError
+            One or more arguments are invalid.
+        """
+
+        # Variables
+        # ---------
+        # pixels2:  List[int]
+        #     The actual set of NeoPixels to apply colors to.
+
+        for element in colors:
+            if element < 0:
+                raise ValueError(f"Color in \"color\" ({element}) can't "
+                                    f"be negative")
+
+        if pixels is None:
+            pixels2:  List[int] = list(range(self.numLEDs))
+        else:
+            for element in pixels:
+                if (element < 0) or (element >= self.numLEDs):
+                    raise ValueError(f"Index in \"pixels\" ({element}) out of "
+                                     f"range (0-{self.numLEDs})")
+
+            pixels2:  List[int] = pixels
+
+        # for i in range(len(pixels2)):
+        #     self.setPixelColor(pixels2[i], colors[i % len(colors)])
+
+        for i, neo_pixel in enumerate(pixels2):
+            self.setPixelColor(neo_pixel, colors[i % len(colors)])
+
+    # ------------------------------------------------------------------
+
     def clear(self) -> None:
         """
         Fill the whole NeoPixel strip with 0 / black / off.
@@ -433,7 +490,7 @@ class NeoPixelStrip(Adafruit_NeoPixel):
 
     # ------------------------------------------------------------------
 
-    pin = property(lambda self:  self._pin, None, None, "Output pin number.")
+    pin = property(lambda self:  self._PIN, None, None, "Output pin number.")
 
     # ------------------------------------------------------------------
 
