@@ -349,6 +349,66 @@ class NeoPixelStrip(Adafruit_NeoPixel):
 
     # ------------------------------------------------------------------
 
+    def rainbow(self, first_hue:  int, reps:  int, saturation: int = 255,
+                brightness:  int = 255) -> None:
+        """
+        Fill NeoPixel strip with one or more cycles of hues.
+
+        Everyone loves the rainbow swirl so much, now it's canon!
+
+        Parameters
+        ----------
+        first_hue:  int
+            Hue of first pixel, 0-65535, representing one full cycle of
+            the color wheel.  Each subsequent pixel will be offset to
+            complete one or more cycles over the length of the strip.
+        reps:  int
+            Number of cycles of the color wheel over the length of the
+            strip.  Default is 1.  Negative values can be used to
+            reverse the hue order.
+        saturation:  int (optional)
+            Saturation, 0-255 = gray to pure hue, default = 255.
+        brightness:  int (optional)
+            Brightness/value, 0-255 = off to max, default = 255.  This
+            is distinct and in combination with any configured global
+            strip brightness.
+
+        Raises
+        ------
+        ValueError
+            One or more arguments are invalid.
+
+        Notes
+        -----
+        See the `AdaFruit_NeoPixel Class Reference
+        <https://adafruit.github.io/Adafruit_NeoPixel/html/class_adafruit___neo_pixel.html#a914f61b78e4d36a03c91372ceded2d46>`_.
+
+        The `gammify` parameter isn't supported because this class's
+        constructor accepts a gamma table as an argument.
+        """
+
+        # Constants
+        # ---------
+        # NUM_NEO_PIXELS:  int
+        #     The number of NeoPixels in the strip.
+        #
+        # Variables
+        # ---------
+        # hue:  int
+        #     Calculated hue for current NeoPixel in iteration.
+        # color:  int
+        #     Calculated RGB color for current NeoPixel in iteration.
+
+        NUM_NEO_PIXELS:  int = self.numPixels()
+
+        for i in range(NUM_NEO_PIXELS):
+            hue:    int = first_hue + (i * reps * 0x10000) // NUM_NEO_PIXELS
+            color:  int = self.ColorHSV(hue, saturation, brightness)
+
+            self.setPixelColor(i, color)
+
+    # ------------------------------------------------------------------
+
     def _neo_pixel_strip_atexit(self) -> None:
         """
         Darken all NeoPixels when program terminates.
