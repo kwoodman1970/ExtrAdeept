@@ -5,15 +5,13 @@ This module contains classes for controlling the following components:
 
   * direct-current drive motors
   * ultrasonic rangefinders
-  * buzzers
   * RGB LED's
-  * NeoPixels
-  * line trackers
+  * infrared sensors
   * on/off devices (e.g. LED lamps)
   * IIC devices (e.g. OLED displays)
   * acceleration sensors
 
-To use one or more of the classes this module (see the **Class
+To use one or more of the classes in this module (see the **Class
 Listings** section), add the following line to the top of your module::
 
     from adeept_components import *list_of_classes*
@@ -23,6 +21,10 @@ Different HAT's support different sets of components.
 Class Listings
 --------------
 DriveMotor
+UltrasonicSensor
+IRSensor
+RGB_LED
+OnOff
 """
 
 # ======================================================================
@@ -36,32 +38,35 @@ from typing import Callable, List, Union
 from RPi import GPIO
 
 # ======================================================================
-# PRIVATE FUNCTIONS
+# PRIVATE SUBROUTINES
 # ======================================================================
 
 def _validate_gpio_pin_number(pin_number:  int, parameter_name:  str) -> None:
-    # Confirm that a pin number is a valid GPIO BCM pin number.
-    #
-    # Parameters
-    # ----------
-    # pin_number:  int
-    #     The pin number to validate
-    # parameter_name:  str
-    #     The name of the caller's parameter that `pin_number` came
-    #     from.  If an exception is raised then this will be included in
-    #     the error message.
-    #
-    # Raises
-    # ------
-    # ValueError
-    #     `pin_number` isn't a valid GPIO BCM pin number.
+    """
+    Confirm that a pin number is a valid GPIO BCM pin number.
 
-    # Adeept HAT's connect to a 40-pin GPIO, which means that (as of
-    # this writing) Raspberry Pi models 2, 3 & 4 are supported.  Valid
-    # GPIO BCM pin numbers are within the same range for all of these
-    # models.  See `Raspberry Pi Pinout <https://pinout.xyz>` for
-    # details.
-    #
+    Parameters
+    ----------
+    pin_number:  int
+        The pin number to validate
+    parameter_name:  str
+        The name of the caller's parameter that `pin_number` came from.
+        If an exception is raised then this will be included in the
+        error message.
+
+    Raises
+    ------
+    ValueError
+        `pin_number` isn't a valid GPIO BCM pin number.
+
+    Notes
+    -----
+    Adeept HAT's connect to a 40-pin GPIO, which means that (as of this
+    writing) Raspberry Pi models 2, 3 & 4 are supported.  Valid GPIO BCM
+    pin numbers are within the same range for all of these models.  See
+    `Raspberry Pi Pinout <https://pinout.xyz>`_ for details.
+    """
+
     # Constants
     # ---------
     # GPIO_MIN_PIN:  int
@@ -74,7 +79,7 @@ def _validate_gpio_pin_number(pin_number:  int, parameter_name:  str) -> None:
 
     if (pin_number < GPIO_MIN_PIN) or (pin_number > GPIO_MAX_PIN):
         raise ValueError(f"\"${parameter_name}\" ({pin_number}) must be from "
-                         f"${GPIO_MIN_PIN} to ${GPIO_MIN_PIN}")
+                         f"${GPIO_MIN_PIN} to ${GPIO_MAX_PIN}")
 
 # ======================================================================
 # DRIVEMOTOR CLASS DEFINITION
@@ -100,8 +105,8 @@ class DriveMotor:
     scale_factor:  float (optional)
         An adjustment for when one drive motor is slightly faster than
         another and needs to be slowed down (for example, to keep a
-        vehicle moving in a straight line).  It must be greater than 0.0
-        and no greater than 1.0 -- the default value is 1.0.
+        vehicle moving in a straight line).  It must be least 0.0 and no
+        greater than 1.0.  The default value is 1.0.
 
     Attributes
     ----------
@@ -195,7 +200,7 @@ class DriveMotor:
 
         if (scale_factor <= 0.0) or (scale_factor > 1.0):
             raise ValueError(f"\"scale_factor\" ({scale_factor}) must be "
-                             f"greater than 0.0 and not more than 1.0")
+                             f"at least 0.0 and no greater than 1.0")
 
         # Declare private properties.
 
@@ -213,10 +218,10 @@ class DriveMotor:
         # except:
         #     pass
 
-        self._CONTROLLER = GPIO.PWM(self._ENABLE_PIN, self._PWM_FREQUENCY)
+        self._controller = GPIO.PWM(self._ENABLE_PIN, self._PWM_FREQUENCY)
         self._speed      = 0
 
-        self._CONTROLLER.start(self._speed)
+        self._controller.start(self._speed)
 
     # ------------------------------------------------------------------
 
@@ -255,7 +260,7 @@ class DriveMotor:
         new_duty_cycle = round(abs(speed * self._SCALE_FACTOR))
         self._speed    = speed
 
-        self._CONTROLLER.ChangeDutyCycle(new_duty_cycle)
+        self._controller.ChangeDutyCycle(new_duty_cycle)
 
     # ------------------------------------------------------------------
 
@@ -266,25 +271,15 @@ class DriveMotor:
 
         GPIO.output(self._INPUT_PIN_1, GPIO.LOW)
         GPIO.output(self._INPUT_PIN_2, GPIO.LOW)
-        self._CONTROLLER.ChangeDutyCycle(100)
+        self._controller.ChangeDutyCycle(100)
 
         self._speed = None
 
     # ------------------------------------------------------------------
 
-    @property
-    def speed(self) -> Union[int, None]:
-        """
-        Get the speed of the drive motor.
-
-        Returns
-        -------
-        Union[int, None]
-            The motor's current speed (-100 to 100), or `None` if an
-            electromotive brake is currently being applied.
-        """
-
-        return self._speed
+    speed = property(lambda self:  self._speed, set_speed, None,
+                     "The speed of the drive motor (None means brake "
+                     "is applied).")
 
 # ======================================================================
 # HC-SR04 ULTRSONIC SENSOR CLASS DEFINITION
@@ -403,7 +398,7 @@ class UltrasonicSensor:
         end_time:    float = 0.0
         blocker:     Event = Event()
 
-        def on_edge(pin:  int):
+        def _on_edge(_:  int):
             nonlocal start_time
             nonlocal end_time
             nonlocal blocker
@@ -432,7 +427,7 @@ class UltrasonicSensor:
         # Since it's possible for edge events to be missed, timeouts on
         # blocking operations must be used.
 
-        GPIO.add_event_detect(self._ECHO_PIN, GPIO.BOTH, callback = on_edge)
+        GPIO.add_event_detect(self._ECHO_PIN, GPIO.BOTH, callback = _on_edge)
 
         GPIO.output(self._TRIGGER_PIN,GPIO.HIGH)
         time.sleep(self._TRIGGER_DURATION)
@@ -796,21 +791,24 @@ class RGB_LED:
                       "The colour of the RGB LED.")
 
 # ======================================================================
-# PORT CLASS DEFINITION
+# ONOFF CLASS DEFINITION
 # ======================================================================
 
-class Port():
+class OnOff():
     """
-    Control a switch port.
+    Control an on/off component.
+
+    For all Adeept HAT's (as of this writing), the component is an
+    on-board LED.
+
+    For the Adeept Robot HAT, a 5V DC component can also be turned on
+    and off.  This component is usually an LED lamp, but other
+    components can be connected as well (e.g. a raw active buzzer).
 
     Connect the component to either the "Port1", "Port2" or "Port3"
-    ports on the Adeept HAT.  Do not ask why those ports are labelled
-    this way or you may attract the attention of the Thought Police.
-    You've been warned.
-
-    A port can be switched on and off.  The most commonly connected
-    component is an LED lamp, but other components can be connected as
-    well.
+    ports on the Adeept Robot HAT.  Do not ask why those ports are
+    labelled this way or you may attract the attention of the Thought
+    Police.  You've been warned.
 
     Parameters
     ----------
@@ -830,9 +828,10 @@ class Port():
     # Private Attributes
     # ------------------
     # _CONTROL_PIN:  int
-    #     The GPIO pin (output) that turns the port on and off.
+    #     The GPIO pin (output) that turns the component(s) on and off.
     # _state:  bool
-    #     The current state of the port (True means on, False means off)
+    #     The current state of the component(s) (True means on, False
+    #     means off).
 
     def __init__(self, control_pin:  int) -> None:
         """
@@ -850,12 +849,12 @@ class Port():
 
     def set_state(self, new_state:  bool) -> None:
         """
-        Set a new state for the port.
+        Set a new state for the component(s).
 
         Parameters
         ----------
         new_state:  bool
-            The port's new state (True means on, False means off).
+            The new state (True means on, False means off).
         """
 
         GPIO.output(self._CONTROL_PIN, GPIO.HIGH if new_state else GPIO.LOW)
@@ -865,4 +864,5 @@ class Port():
     # ------------------------------------------------------------------
 
     state = property(lambda self:  self._state, set_state, None,
-                     "The state of the port (True means on, False means off)")
+                     "The state of the component(s) (True means on, False "
+                     "means off)")

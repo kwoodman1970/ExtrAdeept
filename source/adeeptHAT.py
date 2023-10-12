@@ -55,7 +55,11 @@ import atexit
 from typing import Union
 
 from adeept_components import *
+from adeept_components_buzzers import *
+from adeept_components_neopixels import NeoPixelStrip
 from adeept_components_servo import Servo
+
+from adeept_linetracker import LineTracker
 
 # ======================================================================
 # PRIVATE VARIABLES
@@ -211,6 +215,8 @@ class adeeptMotorHAT2:
         except RuntimeError:
             logging.warning("NeoPixels are not accessable.")
             _neoPixels = None
+
+        _neoPixels.begin()
 
         return _neoPixels
 

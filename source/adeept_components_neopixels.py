@@ -5,6 +5,10 @@ To use, add the following line to the top of your module:
 
     from adeept_components_neopixelstrip import NeoPixelStrip
 
+Class Listings
+--------------
+NeoPixelStrip
+
 Notes
 -----
 `Adafruit_NeoPixel` (the base class for the `NeoPixelStrip` class)
@@ -485,8 +489,7 @@ class NeoPixelStrip(Adafruit_NeoPixel):
 
     # ------------------------------------------------------------------
 
-    numBytes = property(Adafruit_NeoPixel.__len__, None, None,
-                        "Size of 'pixels' buffer.")
+    numBytes = property(len, None, None, "Size of 'pixels' buffer.")
 
     # ------------------------------------------------------------------
 
