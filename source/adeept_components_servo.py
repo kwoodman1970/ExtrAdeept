@@ -4,6 +4,10 @@ Class for controlling Adeept HAT servos.
 To use, add the following line to the top of your module:
 
     from adeept_components_servo import Servo
+
+Class Listings
+--------------
+Servo
 """
 
 # ======================================================================
@@ -638,110 +642,61 @@ class Servo:
 
     # ------------------------------------------------------------------
 
-    @property
-    def MIN_PWM(self) -> int:
-        """
-        Get the servo's minimum PWM value.
-
-        Returns
-        -------
-        int
-            The servo's minimum PWM value.
-        """
-
-        return self._MIN_PWM
+    MIN_PWM = property(lambda self:  self._MIN_PWM, None, None,
+                       "The servo's minimum PWM value.")
 
     # ------------------------------------------------------------------
 
-    @property
-    def MAX_PWM(self) -> int:
-        """
-        Get the servo's maximum PWM value.
-
-        Returns
-        -------
-        int
-            The servo's maximum PWM value.
-        """
-
-        return self._current_pwm
+    MAX_PWM = property(lambda self:  self._MAX_PWM, None, None,
+                       "The servo's maximum PWM value.")
 
     # ------------------------------------------------------------------
 
-    @property
-    def ANGLE_RANGE(self) -> int:
-        """
-        Get the servo's angle range (in degrees).
-
-        Returns
-        -------
-        float
-            The servo's angle range (in degrees).
-        """
-
-        return self._ANGLE_RANGE
+    ANGLE_RANGE = property(lambda self:  self._ANGLE_RANGE, None, None,
+                       "The servo's angle range (in degrees).")
 
     # ------------------------------------------------------------------
 
-    @property
-    def pwm(self) -> int:
-        """
-        Get the servo's current PWM value.
-
-        Returns
-        -------
-        int
-            The servo's curret PWM value.
-        """
-
-        return self._current_pwm
+    pwm = property(lambda self:  self._current_pwm, None, None,
+                       "The servo's current PWM value.")
 
     # ------------------------------------------------------------------
 
-    @property
-    def angle(self) -> float:
-        """
-        Get the servo's current angle (in degrees).
-
-        Returns
-        -------
-        float
-            The servo's curret angle.
-        """
-
-        return (self._current_pwm - self._MIN_PWM) / self._PWM_RANGE \
-               * self._ANGLE_RANGE
+    angle = property(lambda self:  (self._current_pwm - self._MIN_PWM) \
+                     * self._ANGLE_RANGE / self._PWM_RANGE, None, None,
+                     "The servo's current angle (in degrees).")
 
     # ------------------------------------------------------------------
 
     def _validated_pwm(self, pwm:  Optional[int],
                       angle:  Optional[float]) -> int:
+        """
+        Validate either `pwm` or `angle` and return the PWM value.
 
-        # Validate either `pwm` or `angle` and return the PWM value.
-        #
-        # Make sure that either `pwm` or `angle` (but not both) are
-        # within the servo's range and return the appropriate PWM
-        # value.  This is a convenience for methods that handle the
-        # servo's movements.
-        #
-        # Parameters
-        # ----------
-        # pwm:  int, optional
-        #     The new PWM value to set the servo to.  If provided, it
-        #     must be between `self.MIN_PWM` and `self.MAX_PWM`.
-        # angle:  float, optional
-        #     The new angle to set the servo to.  If provided, it
-        #     must be between 0 and `self.ANGLE_RANGE`.
-        #
-        # Returns
-        # -------
-        # int
-        #     `pwm`, or `angle` converted to PWM.
-        #
-        # Raises
-        # ------
-        # ValueError
-        #     One or more arguments are invalid.
+        Make sure that either `pwm` or `angle` (whichever one is passed
+        by the caller) is within the servo's range and return the
+        appropriate PWM value.  This is a convenience for methods that
+        handle the servo's movements.
+
+        Parameters
+        ----------
+        pwm:  int, optional
+            The new PWM value to set the servo to.  If provided, it must
+            be between `self.MIN_PWM` and `self.MAX_PWM`.
+        angle:  float, optional
+            The new angle to set the servo to.  If provided, it must be
+            between 0 and `self.ANGLE_RANGE`.
+
+        Returns
+        -------
+        int
+            `pwm`, or `angle` converted to PWM.
+
+        Raises
+        ------
+        ValueError
+            One or more arguments are invalid.
+        """
 
         # Variables
         # ---------
@@ -777,21 +732,22 @@ class Servo:
 
     # ------------------------------------------------------------------
 
-    def _move_by(self, timing_function:  Callable[[int, float, float], int],
+    def _move_by(self, position_function:  Callable[[int, float, float], int],
                  new_pwm:  int, stop_time:  float) -> None:
+        """
+        Move the servo according to a position function.
 
-        # Move the servo according to a timing function.
-        #
-        # This method is to be used as a thread body.
-        #
-        # Parameters
-        # ----------
-        # new_pwm:  int
-        #     The final PWM value to set the servo to.  It must be
-        #     between "self.MIN_PWM" and "self.MAX_PWM".
-        # stop_time:  float
-        #     The time at which to stop moving the servo.  If it's in
-        #     the past then movement is instantaneous.
+        This method is to be used as a thread body.
+
+        Parameters
+        ----------
+        new_pwm:  int
+            The final PWM value to set the servo to.  It must be between
+            "self.MIN_PWM" and "self.MAX_PWM".
+        stop_time:  float
+            The time at which to stop moving the servo.  If it's in the
+            past then movement is instantaneous.
+        """
 
         # Constants
         # ---------
@@ -811,22 +767,22 @@ class Servo:
         #     The current time in the movement.
 
         START_TIME:  float = time.time()
-        DURATION:  float   = stop_time - START_TIME
-        START_PWM:  int    = self._current_pwm
-        PWM_RANGE:  int    = new_pwm - START_PWM
+        DURATION:    float = stop_time - START_TIME
+        START_PWM:   int   = self._current_pwm
+        PWM_RANGE:   int   = new_pwm - START_PWM
 
         time_index:  float = self._MOVE_INTERVAL
 
         # This is the main loop.  During each iteration, the servo's
-        # position is set to the PWM according to the timing function.
-        # The thread then sleeps for "self._MOVE_INTERVAL" seconds.
+        # position is set to the PWM according to the position function.
+        # The thread then sleeps for `self._MOVE_INTERVAL` seconds.
         #
-        # The loop exits when "end_time" is reached or when
-        # "stop_moving" is set.
+        # The loop exits when `end_time` is reached or when
+        # `stop_moving` is set.
 
         while not self._stop_moving and (time_index < DURATION):
-            self._current_pwm = timing_function(PWM_RANGE, DURATION,
-                                                time_index) \
+            self._current_pwm = position_function(PWM_RANGE, DURATION,
+                                                  time_index) \
                                 + START_PWM
             self._current_pwm = min(max(self._current_pwm, self.MIN_PWM),
                                     self.MAX_PWM)

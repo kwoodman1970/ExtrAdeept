@@ -7,6 +7,12 @@ your module:
     from adeept_components_buzzers import Buzzer
     from adeept_components_buzzers import BuzzerActive
     from adeept_components_buzzers import BuzzerPassive
+
+Class Listings
+--------------
+Buzzer
+BuzzerActive
+BuzzerPassive
 """
 
 # ======================================================================
@@ -40,7 +46,7 @@ class Buzzer:
         "pin" isn't a valid GPIO BCM pin.
     """
 
-    # Instance Constants
+    # Private Attributes
     # ------------------
     # _PIN:  int
     #     The GPIO pin (output) that controls the buzzer.  Descendant
@@ -166,14 +172,14 @@ class BuzzerPassive(Buzzer):
     passive buzzers have different frequency ranges.
     """
 
-    # Class Constants
-    # ---------------
+    # Private Class Attributes
+    # ------------------------
     # _PWM_DUTY_CYCLE:  int
     #     The pulse-width modulation duty cycle to use when making the
     #     buzzer buzz.  It should be a square wave otherwise the buzzer
     #     may sound weak or strange and burn out prematurely.
     #
-    # Instance Variables
+    # Private Attributes
     # ------------------
     # _frequency:  int
     #     The frequency that the buzzer is currently buzzing at (in
@@ -184,13 +190,13 @@ class BuzzerPassive(Buzzer):
     #
     # Class Invariants
     # ----------------
-    # If _controller is None then _frequency MUST be 0.
+    # If `_controller`` is None then `_frequency`` MUST be 0.
     #
     # Design Notes
     # ------------
     # A GPIO.PWM instance cannot be created with a frequency of 0 hertz.
     # Therefore, an instance isn't created until it's first needed (i.e.
-    # when "set_frequency()"" is called with a non-zero argument).
+    # when `set_frequency()` is called with a non-zero argument).
 
     _PWM_DUTY_CYCLE:  int = 50      # makes a nice, even square PWM wave
 

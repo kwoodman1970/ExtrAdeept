@@ -806,9 +806,7 @@ class OnOff():
     components can be connected as well (e.g. a raw active buzzer).
 
     Connect the component to either the "Port1", "Port2" or "Port3"
-    ports on the Adeept Robot HAT.  Do not ask why those ports are
-    labelled this way or you may attract the attention of the Thought
-    Police.  You've been warned.
+    ports on the Adeept Robot HAT.
 
     Parameters
     ----------
