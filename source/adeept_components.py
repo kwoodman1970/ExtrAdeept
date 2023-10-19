@@ -3,13 +3,13 @@ Classes for controlling Adeept HAT components.
 
 This module contains classes for controlling the following components:
 
-  * direct-current drive motors
-  * ultrasonic rangefinders
-  * RGB LED's
-  * infrared sensors
-  * on/off devices (e.g. LED lamps)
-  * IIC devices (e.g. OLED displays)
-  * acceleration sensors
+* direct-current drive motors
+* ultrasonic rangefinders
+* RGB LED's
+* infrared sensors
+* on/off devices (e.g. LED lamps)
+* IIC devices (e.g. OLED displays)
+* acceleration sensors
 
 To use one or more of the classes in this module (see the **Class
 Listings** section), add the following line to the top of your module::
@@ -24,7 +24,7 @@ DriveMotor
 UltrasonicSensor
 IRSensor
 RGB_LED
-OnOff
+SingleSignal
 """
 
 # ======================================================================
@@ -791,76 +791,184 @@ class RGB_LED:
                       "The colour of the RGB LED.")
 
 # ======================================================================
-# ONOFF CLASS DEFINITION
+# SINGLESIGNAL CLASS DEFINITION
 # ======================================================================
 
-class OnOff():
+class SingleSignal():
     """
-    Control an on/off component.
+    Control a component that responds to a single GPIO signal.
 
-    For all Adeept HAT's (as of this writing), the component is an
-    on-board LED.
+    For all Adeept HAT's (as of this writing), this includes the three
+    on-board LED's.
 
-    For the Adeept Robot HAT, a 5V DC component can also be turned on
-    and off.  This component is usually an LED lamp, but other
-    components can be connected as well (e.g. a raw active buzzer).
+    For the Adeept Motor HAT 1.0, this includes a transistored
+    buzzer.
 
-    Connect the component to either the "Port1", "Port2" or "Port3"
-    ports on the Adeept Robot HAT.
+    For the Adeept Robot HAT, this includes 5V DC components.  They're
+    usually LED lamps but other components can be controlled as well
+    (such as a non-transistored buzzer).
+
+    Connect the component(s) to the "Buzzer", "Port1", "Port2" or
+    "Port3" ports (as appropriate) on the Adeept HAT.
 
     Parameters
     ----------
-    control_pin:  int
-        The GPIO pin (output) that turns the port on and off.
+    signal_pin:  int
+        The GPIO pin (output) that's conected to the component.
 
     Attributes
     ----------
     state:  bool
+    frequency:  float
+    duty_cyctle:  float
 
     Raises
     ------
     ValueError
-        `control_pin` isn't a valid GPIO BCM pin.
+        `signal_pin` isn't a valid GPIO BCM pin.
+
+    Notes
+    -----
+    The signal can either be on/off or use pulse-width modulation.
+    Activating one signal type will de-activate the other type.
     """
 
     # Private Attributes
     # ------------------
-    # _CONTROL_PIN:  int
+    # _SIGNAL_PIN:  int
     #     The GPIO pin (output) that turns the component(s) on and off.
-    # _state:  bool
-    #     The current state of the component(s) (True means on, False
-    #     means off).
 
-    def __init__(self, control_pin:  int) -> None:
+    def __init__(self, signal_pin:  int) -> None:
         """
         Prepare a switch port for use.
         """
 
-        _validate_gpio_pin_number(control_pin, "control_pin")
+        _validate_gpio_pin_number(signal_pin, "signal_pin")
 
-        self._CONTROL_PIN:  int  = control_pin
-        self._state:        bool = False
+        self._SIGNAL_PIN:  int                   = signal_pin
+        self._controller:  Union[GPIO.PWM, None] = None
+        self._state:       bool                  = False
+        self._frequency:   float                 = 0.0
+        self._duty_cycle:  int                   = 0
 
-        GPIO.setup(self._CONTROL_PIN, GPIO.OUT, initial = GPIO.LOW)
+        GPIO.setup(self._SIGNAL_PIN, GPIO.OUT, initial = GPIO.LOW)
 
     # ------------------------------------------------------------------
 
-    def set_state(self, new_state:  bool) -> None:
+    def set_state(self, state:  bool) -> None:
         """
-        Set a new state for the component(s).
+        Set a new on/off state for the component(s).
+
+        if pulse-width modulation is active then it's stopped.
 
         Parameters
         ----------
-        new_state:  bool
+        state:  bool
             The new state (True means on, False means off).
         """
 
-        GPIO.output(self._CONTROL_PIN, GPIO.HIGH if new_state else GPIO.LOW)
+        self._state = state
 
-        self._state = new_state
+        if self._frequency > 0.0:
+            self._controller.stop()
+
+            self._frequency = 0.0
+
+        GPIO.output(self._SIGNAL_PIN, GPIO.HIGH if state else GPIO.LOW)
+
+    # ------------------------------------------------------------------
+
+    def set_frequency(self, frequency:  float) -> None:
+        """
+        Set a new frequency for pulse-width modulation.
+
+        If pulse-width modulation isn't active then a frequency that's
+        greater than 0.0 will activate it; if it is active then a
+        frequency of 0.0 will stop it.
+
+        Parameters
+        ----------
+        frequency:  float
+            The new frequency (in hertz) for pulse-width modulation
+            (cannot be negative).
+
+        Raises
+        ------
+        ValueError
+            `frequency` is negative.
+        """
+
+        if frequency < 0.0:
+            raise ValueError(f"\"frequency\" ({frequency}) cannot be " \
+                             f"negative.")
+
+        assert (self._controller is not None) or (self._frequency == 0.0)
+
+        if frequency != self._frequency:
+            if self._state and (self._frequency == 0.0):
+                GPIO.output(self._SIGNAL_PIN, GPIO.LOW)
+
+                self._state = False
+
+            if self._controller is not None:
+                if frequency == 0.0:
+                    self._controller.stop()
+                else:
+                    self._controller.ChangeFrequency(frequency)
+
+                    if self._frequency == 0.0:
+                        self._controller.start(self._duty_cycle)
+            elif frequency > 0.0:
+                self._controller = GPIO.PWM(self._SIGNAL_PIN, frequency)
+
+                self._controller.start(self._duty_cycle)
+
+            self._frequency = frequency
+
+    # ------------------------------------------------------------------
+
+    def set_duty_cycle(self, duty_cycle:  float) -> None:
+        """
+        Set a new duty cycle for pulse-width modulation.
+
+        If pulse-width modulation isn't active then the new duty cycle
+        will be applied when it becomes active.
+
+        Parameters
+        ----------
+        duty_cycle : float
+            The new duty cycle for pulse-width modulation (must be from
+            0.0 to 100.0).
+
+        Raises
+        ------
+        ValueError
+            `duty_cycle` is out of range.
+        """
+
+        if (duty_cycle < 0.0) or (duty_cycle > 100.0):
+            raise ValueError(f"\"duty_cycle\" ({duty_cycle}) must be from " \
+                             f"0.0 to 100.0.")
+
+        if duty_cycle != self._duty_cycle:
+            self._duty_cycle = duty_cycle
+
+            if self._frequency > 0.0:
+                self._controller.ChangeDutyCycle(self._duty_cycle)
 
     # ------------------------------------------------------------------
 
     state = property(lambda self:  self._state, set_state, None,
-                     "The state of the component(s) (True means on, False "
-                     "means off)")
+                     "The on/off signal state (True means on, False means "
+                     "off).")
+
+    # ------------------------------------------------------------------
+
+    frequency = property(lambda self:  self._frequency, set_frequency, None,
+                         "The pulse-width modulation frequency (0.0 means not "
+                         "active).")
+
+    # ------------------------------------------------------------------
+
+    duty_cycle = property(lambda self:  self._duty_cycle, set_duty_cycle, None,
+                          "The pulse-width modulation duty cycle.")
