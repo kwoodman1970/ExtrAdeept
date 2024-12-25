@@ -795,7 +795,8 @@ class Servo:
 
             time_index += self._MOVE_INTERVAL
 
-        self._current_pwm = new_pwm
+        if not self._stop_moving:
+            self._current_pwm = new_pwm
 
         with _SERVOS_LOCK:
             self._CONTROLLER.set_pwm(self._PORT_NUM, self._PWM_OFFSET,
