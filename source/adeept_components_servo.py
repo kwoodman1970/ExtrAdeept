@@ -14,6 +14,7 @@ Servo
 # IMPORTS FROM OTHER MODULES
 # ======================================================================
 
+import threading
 from typing import Optional
 import time
 
@@ -121,6 +122,7 @@ class Servo:
 
         # Initialize the servo state.
 
+        self._lock = threading.RLock()
         self._position_function: Optional[PositionFunction] = None
         self._movement_start_time: Optional[float] = None
         self._movement_stop_time: float = time.time()
@@ -163,21 +165,22 @@ class Servo:
             raise ValueError("\"stop_time\" must be provided if and only if "
                              "a position function is provided.")
 
-        if position_function is None:
-            # Instant movement
-            self._movement_start_pwm = None
-            self._movement_start_time = None
-            self._movement_stop_time = time.time()
-        else:
-            assert stop_time is not None
+        with self._lock:
+            if position_function is None:
+                # Instant movement
+                self._movement_start_pwm = None
+                self._movement_start_time = None
+                self._movement_stop_time = time.time()
+            else:
+                assert stop_time is not None
 
-            # Gradual movement using position function
-            self._movement_start_pwm = self.pwm()
-            self._movement_start_time = time.time()
-            self._movement_stop_time = stop_time
+                # Gradual movement using position function
+                self._movement_start_pwm = self.pwm()
+                self._movement_start_time = time.time()
+                self._movement_stop_time = stop_time
 
-        self._movement_stop_pwm = pwm
-        self._position_function = position_function
+            self._movement_stop_pwm = pwm
+            self._position_function = position_function
 
     # -------------------------------------------------------------------
 
@@ -225,11 +228,12 @@ class Servo:
         The servo will remain at its current position.
         """
 
-        self._movement_stop_pwm = self.pwm()
-        self._movement_stop_time = time.time()
-        self._movement_start_pwm = None
-        self._movement_start_time = None
-        self._position_function = None
+        with self._lock:
+            self._movement_stop_pwm = self.pwm()
+            self._movement_stop_time = time.time()
+            self._movement_start_pwm = None
+            self._movement_start_time = None
+            self._position_function = None
 
     # -------------------------------------------------------------------
 
@@ -290,7 +294,9 @@ class Servo:
             position function, False otherwise.
         """
 
-        return self._movement_stop_time < time.time()
+        with self._lock:
+            return self._position_function is not None \
+                and self._movement_stop_time > time.time()
 
     # -------------------------------------------------------------------
 
@@ -300,25 +306,28 @@ class Servo:
         position function.
         """
 
-        target_time:  float = time.time() if at_time is None else at_time
+        with self._lock:
+            target_time:  float = time.time() if at_time is None else at_time
 
-        if self._position_function is None:
-            return self._movement_stop_pwm
-        elif target_time >= self._movement_stop_time:
-            return self._movement_stop_pwm
-        else:
-            assert self._movement_start_time is not None
-            assert self._movement_start_pwm is not None
-
-            if target_time <= self._movement_start_time:
-                return self._movement_start_pwm
+            if self._position_function is None:
+                return self._movement_stop_pwm
+            elif target_time >= self._movement_stop_time:
+                return self._movement_stop_pwm
             else:
-                elapsed_time:  float = target_time - self._movement_start_time
-                pwm_range:  int = self._movement_stop_pwm - self._movement_start_pwm
+                assert self._movement_start_time is not None
+                assert self._movement_start_pwm is not None
 
-                return self._position_function(pwm_range,
-                                               self._movement_stop_time - self._movement_start_time,
-                                               elapsed_time)
+                if target_time <= self._movement_start_time:
+                    return self._movement_start_pwm
+                else:
+                    elapsed_time:  float = target_time - self._movement_start_time
+                    pwm_range:  int = self._movement_stop_pwm - self._movement_start_pwm
+                    new_pwm:  int = self._movement_start_pwm \
+                        + self._position_function(pwm_range,
+                                                  self._movement_stop_time - self._movement_start_time,
+                                                  elapsed_time)
+
+                    return min(max(new_pwm, self._MIN_PWM), self._MAX_PWM)
 
     # -------------------------------------------------------------------
 
@@ -327,7 +336,8 @@ class Servo:
         Get the current angle of the servo.
         """
 
-        return (self.pwm() - self._MIN_PWM) * self._ANGLE_RANGE / self._PWM_RANGE
+        with self._lock:
+            return (self.pwm() - self._MIN_PWM) * self._ANGLE_RANGE / self._PWM_RANGE
 
     # -------------------------------------------------------------------
     PWM_OFFSET = property(lambda self: self._PWM_OFFSET, None, None,

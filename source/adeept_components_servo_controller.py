@@ -82,7 +82,7 @@ class AdafruitPCA9685:
     #     controller simultaneously.
     # _servos : List[Optional[Servo]]
     #     List of servo objects registered with this controller.
-    # _last_pwms : List[int]
+    # _last_pwms : List[Optional[int]]
     #     Cached PWM values for each port to avoid redundant hardware
     #     writes.
     # _update_thread : Optional[threading.Thread]
@@ -115,7 +115,7 @@ class AdafruitPCA9685:
         # Initialize servo management
         self._lock:  threading.Lock = threading.Lock()
         self._servos:  List[Optional[Servo]] = [None] * self.MAX_NUM_SERVOS
-        self._last_pwms:  List[int] = [self._SERVOS_INITIAL_PWM] * self.MAX_NUM_SERVOS
+        self._last_pwms:  List[Optional[int]] = [self._SERVOS_INITIAL_PWM] * self.MAX_NUM_SERVOS
 
         # Initialize update thread
         self._running:  bool = False
@@ -256,6 +256,9 @@ class AdafruitPCA9685:
         # Now safe to access hardware directly
         with self._lock:
             self._controller.set_all_pwm(0, 0)
+
+            for i in range(self.MAX_NUM_SERVOS):
+                self._last_pwms[i] = None
 
     # -------------------------------------------------------------------
 
@@ -399,7 +402,7 @@ class AdafruitPCA9685:
             self._controller.set_all_pwm(offset, pwm_value)
 
             for i in range(self.MAX_NUM_SERVOS):
-                self._last_pwms[i] = pwm_value
+                self._last_pwms[i] = None
 
     # -------------------------------------------------------------------
 
@@ -420,11 +423,15 @@ class AdafruitPCA9685:
             timeout period, False otherwise.
         """
 
-        # First, tell all servos to stop moving
+        if not self._stop_update_thread(timeout):
+            return False
+
         with self._lock:
-            for servo in self._servos:
+            for port_num, servo in enumerate(self._servos):
                 if servo is not None:
                     servo.stop_moving()
+                    pwm_value = servo.pwm()
+                    self._controller.set_pwm(port_num, servo.PWM_OFFSET, pwm_value)
+                    self._last_pwms[port_num] = pwm_value
 
-        # Then stop the update thread
-        return self._stop_update_thread(timeout)
+        return True
