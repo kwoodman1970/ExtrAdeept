@@ -46,7 +46,7 @@ class Servo:
         range of motion). Must be greater than `min_pwm`.
     angle_range : float
         The number of degrees that the servo rotates between `min_pwm`
-        and `max_pwm`. Must be greater than 0.0 (default is 180.0).
+        and `max_pwm`. Must be greater than 0.0.
     initial_pwm : int
         The initial PWM to send to the servo (such as a starting
         position or a home position). Must be between `min_pwm` and
@@ -54,11 +54,15 @@ class Servo:
 
     Attributes
     ----------
+    PWM_OFFSET : int
     MIN_PWM : int
     MAX_PWM : int
     ANGLE_RANGE : float
-    pwm : int
+    is_moving : bool
     angle : float
+    stop_pwm : int
+    stop_angle : float
+    stop_time : Optional[float]
 
     Raises
     ------
@@ -266,12 +270,12 @@ class Servo:
         if (timeout is not None) and (timeout < 0.0):
             raise ValueError(f"\"timeout\" ({timeout}) must be at least 0.0.")
 
-        if not self.is_moving():
+        if not self.is_moving:
             return True
 
         start_wait_time = time.time()
 
-        while self.is_moving():
+        while self.is_moving:
             if timeout is not None:
                 elapsed = time.time() - start_wait_time
                 if elapsed >= timeout:
@@ -283,27 +287,21 @@ class Servo:
 
     # -------------------------------------------------------------------
 
-    def is_moving(self) -> bool:
-        """
-        Check if the servo is currently moving.
-
-        Returns
-        -------
-        bool
-            True if the servo is currently executing a movement with a
-            position function, False otherwise.
-        """
-
-        with self._lock:
-            return self._position_function is not None \
-                and self._movement_stop_time > time.time()
-
-    # -------------------------------------------------------------------
-
     def pwm(self, at_time: Optional[float] = None) -> int:
         """
         Get the current PWM value of the servo, based on the current
         position function.
+
+        Parameters
+        ----------
+        at_time : float, optional
+            The time at which the PWM value would be.  If not provided
+            then the current PWM value is returned.
+
+        Returns
+        -------
+        int
+            The PWM value of the servo at the requested time.
         """
 
         with self._lock:
@@ -331,31 +329,149 @@ class Servo:
 
     # -------------------------------------------------------------------
 
-    def angle(self) -> float:
+    @property
+    def PWM_OFFSET(self) -> int:
         """
-        Get the current angle of the servo.
+        Get the servo's PWM offset.
+
+        Returns
+        -------
+        int
+            The servo's PWM offset.
+        """
+
+        return self._PWM_OFFSET
+
+    # -------------------------------------------------------------------
+
+    @property
+    def MIN_PWM(self) -> int:
+        """
+        Get the servo's minimum PWM value.
+
+        Returns
+        -------
+        int
+            The servo's minimum PWM value.
+        """
+
+        return self._MIN_PWM
+
+    # -------------------------------------------------------------------
+
+    @property
+    def MAX_PWM(self) -> int:
+        """
+        Get the servo's maximum PWM value.
+
+        Returns
+        -------
+        int
+            The servo's maximum PWM value.
+        """
+
+        return self._MAX_PWM
+
+    # -------------------------------------------------------------------
+
+    @property
+    def ANGLE_RANGE(self) -> float:
+        """
+        Get the servo's angle range (in degrees).
+
+        Returns
+        -------
+        float
+            The servo's angle range (in degrees).
+        """
+
+        return self._ANGLE_RANGE
+
+
+    # -------------------------------------------------------------------
+
+    @property
+    def is_moving(self) -> bool:
+        """
+        Check if the servo is currently moving.
+
+        Returns
+        -------
+        bool
+            True if the servo is currently executing a movement with a
+            position function, False otherwise.
         """
 
         with self._lock:
-            return (self.pwm() - self._MIN_PWM) * self._ANGLE_RANGE / self._PWM_RANGE
-
-    # -------------------------------------------------------------------
-    PWM_OFFSET = property(lambda self: self._PWM_OFFSET, None, None,
-                          "The servo's PWM offset.")
+            return self._position_function is not None \
+                and self._movement_stop_time > time.time()
 
     # -------------------------------------------------------------------
 
-    MIN_PWM = property(lambda self: self._MIN_PWM, None, None,
-                      "The servo's minimum PWM value.")
+    @property
+    def angle(self) -> float:
+        """
+        Get the current angle of the servo.
+
+        Returns
+        -------
+        float
+            The current angle of the servo.
+        """
+
+        with self._lock:
+            return (self.pwm() - self._MIN_PWM) * self._ANGLE_RANGE \
+                / self._PWM_RANGE
 
     # -------------------------------------------------------------------
 
-    MAX_PWM = property(lambda self: self._MAX_PWM, None, None,
-                      "The servo's maximum PWM value.")
+    @property
+    def stop_pwm(self) -> int:
+        """
+        Get the target PWM value for the current or most recent move.
+
+        Returns
+        -------
+        int
+            The target PWM value for the current or most recent move.
+        """
+
+        with self._lock:
+            return self._movement_stop_pwm
 
     # -------------------------------------------------------------------
 
-    ANGLE_RANGE = property(lambda self: self._ANGLE_RANGE, None, None,
-                          "The servo's angle range (in degrees).")
+    @property
+    def stop_angle(self) -> float:
+        """
+        Get the target angle for the current or most recent move.
 
-# ======================================================================
+        Returns
+        -------
+        float
+            The target angle for the current or most recent move.
+        """
+
+        with self._lock:
+            return (self._movement_stop_pwm - self._MIN_PWM) \
+                * self._ANGLE_RANGE / self._PWM_RANGE
+
+    # -------------------------------------------------------------------
+
+    @property
+    def stop_time(self) -> Optional[float]:
+        """
+        Get the time at which the current move will end, or None if the
+        servo is not currently moving.
+
+        Returns
+        -------
+        Optional[float]
+            The time at which the current move will end, or None if the
+            servo is not currently moving.
+        """
+
+        with self._lock:
+            if self.is_moving:
+                return self._movement_stop_time
+            return None
